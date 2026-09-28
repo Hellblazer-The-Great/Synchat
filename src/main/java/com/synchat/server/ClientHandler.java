@@ -66,6 +66,7 @@ public class ClientHandler implements Runnable {
                 case Protocol.FRIEND_RESPONSE -> handleFriendResponse(json);
                 case Protocol.MESSAGE -> handleMessage(json);
                 case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
+                case Protocol.REQUEST_FRIEND_REQUESTS -> sendPendingFriendRequestsToSelf();
                 default -> sendError("Unknown command: " + type);
             }
         } catch (SQLException e) {
@@ -123,11 +124,12 @@ public class ClientHandler implements Runnable {
             sendError("No such user");
             return;
         }
-        friends.create(new FriendRequest(0, userId, target.getId(), FriendStatus.PENDING));
+        FriendRequest created = friends.create(new FriendRequest(0, userId, target.getId(), FriendStatus.PENDING));
         ClientHandler targetHandler = server.getHandler(target.getUsername());
-        if (targetHandler != null) {
+        if (targetHandler != null && created != null) {
             JSONObject notice = new JSONObject();
             notice.put("type", Protocol.FRIEND_REQUEST);
+            notice.put("requestId", created.getId());
             notice.put("fromUsername", username);
             targetHandler.send(notice);
         }
@@ -135,13 +137,28 @@ public class ClientHandler implements Runnable {
 
     private void handleFriendResponse(JSONObject json) throws SQLException {
         FriendRepository friends = new FriendRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
         FriendRequest fr = friends.findById(json.getInt("requestId"));
         if (fr == null) {
             sendError("Request not found");
             return;
         }
-        fr.setStatus(json.getBoolean("accepted") ? FriendStatus.ACCEPTED : FriendStatus.BLOCKED);
+        boolean accepted = json.getBoolean("accepted");
+        fr.setStatus(accepted ? FriendStatus.ACCEPTED : FriendStatus.BLOCKED);
         friends.update(fr);
+
+        // Let the original requester know what happened to their request, if they're online.
+        User requester = users.findById(fr.getUserId());
+        if (requester != null) {
+            ClientHandler requesterHandler = server.getHandler(requester.getUsername());
+            if (requesterHandler != null) {
+                JSONObject notice = new JSONObject();
+                notice.put("type", Protocol.FRIEND_RESPONSE_RESULT);
+                notice.put("byUsername", username);
+                notice.put("accepted", accepted);
+                requesterHandler.send(notice);
+            }
+        }
     }
 
     private void handleMessage(JSONObject json) throws SQLException {
@@ -202,6 +219,32 @@ public class ClientHandler implements Runnable {
         payload.put("type", Protocol.USER_LIST);
         payload.put("users", new JSONArray(server.getOnlineUsernames()));
         return payload;
+    }
+
+    /**
+     * Sends this user every friend request that's still waiting on their
+     * response - both the ones that arrived while they were offline, and
+     * any that were pushed live but missed during a screen transition
+     * (same self-healing idea as REQUEST_USER_LIST).
+     */
+    private void sendPendingFriendRequestsToSelf() throws SQLException {
+        FriendRepository friends = new FriendRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+
+        JSONArray arr = new JSONArray();
+        for (FriendRequest fr : friends.findPendingFor(userId)) {
+            User requester = users.findById(fr.getUserId());
+            if (requester == null) continue;
+            JSONObject o = new JSONObject();
+            o.put("requestId", fr.getId());
+            o.put("fromUsername", requester.getUsername());
+            arr.put(o);
+        }
+
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.FRIEND_REQUESTS_LIST);
+        payload.put("requests", arr);
+        send(payload);
     }
 
     private void sendError(String message) {

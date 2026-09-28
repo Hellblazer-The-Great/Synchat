@@ -50,6 +50,8 @@ public class MainChatView extends BorderPane implements MessageListener {
     private final TextField inputField = new TextField();
     private final Label chatHeader = new Label("Select an online user to start chatting");
     private String activeChatPartner = null;
+    private final ObservableList<IncomingRequest> pendingRequests = FXCollections.observableArrayList();
+    private VBox requestsBox;
 
     public MainChatView(Stage stage, NetworkClient client, String myUsername) {
         this.client = client;
@@ -62,6 +64,10 @@ public class MainChatView extends BorderPane implements MessageListener {
         JSONObject refresh = new JSONObject();
         refresh.put("type", Protocol.REQUEST_USER_LIST);
         client.send(refresh);
+
+        JSONObject refreshRequests = new JSONObject();
+        refreshRequests.put("type", Protocol.REQUEST_FRIEND_REQUESTS);
+        client.send(refreshRequests);
 
         setTop(buildTop());
 
@@ -108,6 +114,7 @@ public class MainChatView extends BorderPane implements MessageListener {
             TextInputDialog dialog = new TextInputDialog();
             dialog.setHeaderText("Send a friend request");
             dialog.setContentText("Username:");
+            dialog.setResizable(true);
             dialog.showAndWait().ifPresent(uname -> {
                 JSONObject req = new JSONObject();
                 req.put("type", Protocol.FRIEND_REQUEST);
@@ -142,8 +149,11 @@ public class MainChatView extends BorderPane implements MessageListener {
 
         VBox requestsBox = new VBox(8);
         requestsBox.setPadding(new Insets(10));
-        requestsBox.getChildren().add(new Label("Incoming friend requests appear here as pop-ups."));
-        Tab requestsTab = new Tab("Requests", requestsBox);
+        this.requestsBox = requestsBox;
+        rebuildRequestsBox();
+        ScrollPane requestsScroll = new ScrollPane(requestsBox);
+        requestsScroll.setFitToWidth(true);
+        Tab requestsTab = new Tab("Requests", requestsScroll);
 
         tabs.getTabs().addAll(onlineTab, requestsTab);
         VBox.setVgrow(tabs, Priority.ALWAYS);
@@ -182,6 +192,43 @@ public class MainChatView extends BorderPane implements MessageListener {
         chatHeader.setText("Chat with " + username);
         chatLog.getChildren().clear();
     }
+
+    /** Redraws the Requests tab from the current pendingRequests list. */
+    private void rebuildRequestsBox() {
+        requestsBox.getChildren().clear();
+        if (pendingRequests.isEmpty()) {
+            requestsBox.getChildren().add(new Label("No pending friend requests."));
+            return;
+        }
+        for (IncomingRequest req : pendingRequests) {
+            Label name = new Label(req.fromUsername());
+            HBox.setHgrow(name, Priority.ALWAYS);
+
+            Button accept = new Button("Accept");
+            accept.setOnAction(e -> respondToRequest(req, true));
+
+            Button decline = new Button("Decline");
+            decline.setOnAction(e -> respondToRequest(req, false));
+
+            HBox row = new HBox(8, name, accept, decline);
+            row.setAlignment(Pos.CENTER_LEFT);
+            requestsBox.getChildren().add(row);
+        }
+    }
+
+    private void respondToRequest(IncomingRequest req, boolean accepted) {
+        JSONObject resp = new JSONObject();
+        resp.put("type", Protocol.FRIEND_RESPONSE);
+        resp.put("requestId", req.requestId());
+        resp.put("accepted", accepted);
+        client.send(resp);
+
+        pendingRequests.removeIf(r -> r.requestId() == req.requestId());
+        rebuildRequestsBox();
+    }
+
+    /** One incoming friend request waiting on a response: who sent it, and its DB row id. */
+    private record IncomingRequest(int requestId, String fromUsername) {}
 
     private void sendCurrentMessage() {
         String text = inputField.getText();
@@ -224,15 +271,43 @@ public class MainChatView extends BorderPane implements MessageListener {
                     appendBubble(from, json.getString("content"), mine);
                 }
             }
-            case Protocol.FRIEND_REQUEST -> new Alert(Alert.AlertType.INFORMATION,
-                    json.getString("fromUsername") + " sent you a friend request!").showAndWait();
-            case Protocol.ERROR -> new Alert(Alert.AlertType.WARNING, json.getString("message")).showAndWait();
+            case Protocol.FRIEND_REQUESTS_LIST -> {
+                pendingRequests.clear();
+                JSONArray arr = json.getJSONArray("requests");
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.getJSONObject(i);
+                    pendingRequests.add(new IncomingRequest(o.getInt("requestId"), o.getString("fromUsername")));
+                }
+                rebuildRequestsBox();
+            }
+            case Protocol.FRIEND_REQUEST -> {
+                int requestId = json.getInt("requestId");
+                String from = json.getString("fromUsername");
+                boolean alreadyKnown = pendingRequests.stream().anyMatch(r -> r.requestId() == requestId);
+                if (!alreadyKnown) pendingRequests.add(new IncomingRequest(requestId, from));
+                rebuildRequestsBox();
+                showResizableAlert(Alert.AlertType.INFORMATION, from + " sent you a friend request! Check the Requests tab.");
+            }
+            case Protocol.FRIEND_RESPONSE_RESULT -> {
+                String by = json.getString("byUsername");
+                boolean accepted = json.getBoolean("accepted");
+                showResizableAlert(Alert.AlertType.INFORMATION,
+                        by + (accepted ? " accepted" : " declined") + " your friend request.");
+            }
+            case Protocol.ERROR -> showResizableAlert(Alert.AlertType.WARNING, json.getString("message"));
             default -> { /* ignore unrecognized events */ }
         }
     }
 
+    /** Small helper so every popup in the app follows the "resizable windows" requirement. */
+    private static void showResizableAlert(Alert.AlertType type, String message) {
+        Alert alert = new Alert(type, message);
+        alert.setResizable(true);
+        alert.showAndWait();
+    }
+
     @Override
     public void onDisconnected() {
-        new Alert(Alert.AlertType.ERROR, "Disconnected from server.").showAndWait();
+        showResizableAlert(Alert.AlertType.ERROR, "Disconnected from server.");
     }
 }

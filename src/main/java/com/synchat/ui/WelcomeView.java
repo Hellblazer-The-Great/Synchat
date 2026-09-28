@@ -61,10 +61,13 @@ public class WelcomeView extends StackPane {
                     "Server started!\n\nOther devices on this Wi-Fi network can join by entering:\n"
                             + ip + "\n\n(You can also run this app again on this same computer and join with 127.0.0.1 to test multiple users locally.)");
             alert.setHeaderText("Hosting on " + ip + ":" + PORT);
+            alert.setResizable(true);
             alert.showAndWait();
             goToLogin("127.0.0.1", PORT);
         } catch (Exception ex) {
-            new Alert(Alert.AlertType.ERROR, "Could not start server: " + ex.getMessage()).showAndWait();
+            Alert error = new Alert(Alert.AlertType.ERROR, "Could not start server: " + ex.getMessage());
+            error.setResizable(true);
+            error.showAndWait();
         }
     }
 

@@ -17,6 +17,7 @@ public class Main extends Application {
         Scene scene = new Scene(new WelcomeView(stage), 950, 620);
         stage.setMinWidth(760);
         stage.setMinHeight(500);
+        stage.setResizable(true); // explicit: the whole app window is user-resizable
         stage.setTitle("SynChat");
         stage.setScene(scene);
         stage.show();
