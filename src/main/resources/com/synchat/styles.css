@@ -1,0 +1,297 @@
+/*
+ * SynChat stylesheet.
+ *
+ * Color "tokens" are declared as -fx-* custom properties on .root and
+ * overridden on .app-dark - every other rule below just references the
+ * token (-fx-bg, -fx-surface, etc.) instead of a literal color, so
+ * toggling the "app-dark" style class (see MainChatView's Settings menu)
+ * re-themes the whole app without duplicating every rule.
+ */
+
+.root {
+    -fx-font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-accent: #5B5FEF;
+    -fx-accent-hover: #4448c9;
+    -fx-accent-soft: #E7E8FD;
+    -fx-danger: #E4574C;
+    -fx-danger-soft: #FBEAE9;
+    -fx-online: #2E9E5B;
+
+    -fx-bg: #F3F4FA;
+    -fx-surface: #FFFFFF;
+    -fx-text-main: #20232E;
+    -fx-text-muted: #6B7080;
+    -fx-border-soft: #E4E6F0;
+
+    -fx-background-color: -fx-bg;
+    -fx-text-fill: -fx-text-main;
+}
+
+.app-dark {
+    -fx-accent-soft: #363A66;
+    -fx-danger-soft: #4A2E2C;
+    -fx-online: #4FCB84;
+
+    -fx-bg: #1B1D2B;
+    -fx-surface: #242737;
+    -fx-text-main: #ECEDF6;
+    -fx-text-muted: #9BA0B5;
+    -fx-border-soft: #363A4E;
+}
+
+Label { -fx-text-fill: -fx-text-main; }
+
+/* ---------- Auth screens (Welcome / Login / Register) ---------- */
+
+.auth-root {
+    -fx-background-color: -fx-bg;
+}
+
+.card {
+    -fx-background-color: -fx-surface;
+    -fx-background-radius: 16;
+    -fx-effect: dropshadow(gaussian, rgba(20,20,40,0.18), 24, 0.12, 0, 8);
+    -fx-padding: 38 42 34 42;
+}
+
+.app-title {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fx-accent;
+}
+
+.screen-title {
+    -fx-font-size: 21px;
+    -fx-font-weight: bold;
+}
+
+.subtitle {
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-text-muted;
+}
+
+.status-error {
+    -fx-text-fill: -fx-danger;
+    -fx-font-size: 12px;
+}
+
+/* ---------- Inputs ---------- */
+
+.text-field, .password-field {
+    -fx-background-color: -fx-bg;
+    -fx-background-radius: 9;
+    -fx-border-color: -fx-border-soft;
+    -fx-border-radius: 9;
+    -fx-border-width: 1.2;
+    -fx-padding: 9 12 9 12;
+    -fx-prompt-text-fill: -fx-text-muted;
+    -fx-text-fill: -fx-text-main;
+}
+.text-field:focused, .password-field:focused {
+    -fx-border-color: -fx-accent;
+}
+
+/* ---------- Buttons ---------- */
+
+.button {
+    -fx-background-radius: 9;
+    -fx-cursor: hand;
+    -fx-padding: 9 18 9 18;
+    -fx-font-size: 13px;
+}
+
+.button-primary {
+    -fx-background-color: -fx-accent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.button-primary:hover  { -fx-background-color: -fx-accent-hover; }
+.button-primary:armed  { -fx-background-color: derive(-fx-accent-hover, -10%); }
+
+.button-outline {
+    -fx-background-color: transparent;
+    -fx-border-color: -fx-accent;
+    -fx-border-radius: 9;
+    -fx-border-width: 1.4;
+    -fx-text-fill: -fx-accent;
+}
+.button-outline:hover { -fx-background-color: -fx-accent-soft; }
+
+.button-pill {
+    -fx-background-radius: 20;
+    -fx-padding: 5 14 5 14;
+    -fx-font-size: 11.5px;
+    -fx-background-color: -fx-bg;
+    -fx-border-color: -fx-border-soft;
+    -fx-border-radius: 20;
+    -fx-text-fill: -fx-text-main;
+}
+.button-pill:hover { -fx-background-color: -fx-border-soft; }
+
+.button-pill-accept {
+    -fx-background-color: -fx-accent;
+    -fx-text-fill: white;
+    -fx-border-width: 0;
+}
+.button-pill-accept:hover { -fx-background-color: -fx-accent-hover; }
+
+.button-pill-danger {
+    -fx-background-color: transparent;
+    -fx-border-color: -fx-danger;
+    -fx-text-fill: -fx-danger;
+}
+.button-pill-danger:hover { -fx-background-color: -fx-danger-soft; }
+
+.icon-toggle-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-border-color: -fx-border-soft;
+    -fx-border-radius: 8;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+.icon-toggle-button:hover    { -fx-background-color: -fx-bg; }
+.icon-toggle-button:selected { -fx-background-color: -fx-accent-soft; -fx-border-color: -fx-accent; }
+
+.hyperlink { -fx-text-fill: -fx-accent; }
+.hyperlink:visited { -fx-text-fill: -fx-accent; }
+
+/* ---------- Main chat screen chrome ---------- */
+
+.top-bar {
+    -fx-background-color: -fx-surface;
+    -fx-border-color: transparent transparent -fx-border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.menu-bar {
+    -fx-background-color: -fx-surface;
+}
+
+.quote-label {
+    -fx-font-style: italic;
+    -fx-text-fill: -fx-text-muted;
+}
+
+.logged-in-label {
+    -fx-font-weight: bold;
+}
+
+.sidebar {
+    -fx-background-color: -fx-surface;
+}
+
+.tab-pane .tab-header-area {
+    -fx-padding: 6 0 0 10;
+}
+.tab-pane .tab {
+    -fx-background-radius: 8 8 0 0;
+}
+
+.list-view {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 6 8 6 8;
+}
+.list-cell:filled:hover {
+    -fx-background-color: -fx-bg;
+    -fx-background-radius: 8;
+}
+.list-cell:filled:selected {
+    -fx-background-color: -fx-accent-soft;
+    -fx-background-radius: 8;
+}
+
+.status-dot-online  { -fx-text-fill: -fx-online; -fx-font-weight: bold; }
+.status-dot-offline { -fx-text-fill: -fx-text-muted; }
+
+.avatar-chip {
+    -fx-min-width: 28; -fx-min-height: 28;
+    -fx-max-width: 28; -fx-max-height: 28;
+    -fx-background-radius: 100;
+}
+.avatar-chip-label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+}
+
+.requests-empty {
+    -fx-text-fill: -fx-text-muted;
+    -fx-font-style: italic;
+}
+
+.request-row {
+    -fx-background-color: -fx-bg;
+    -fx-background-radius: 10;
+    -fx-padding: 8 10 8 10;
+}
+
+/* ---------- Chat area ---------- */
+
+.chat-area {
+    -fx-background-color: -fx-bg;
+}
+
+.chat-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.chat-header-bar {
+    -fx-background-color: -fx-surface;
+    -fx-border-color: transparent transparent -fx-border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.chat-header-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.bubble-mine {
+    -fx-background-color: -fx-accent;
+    -fx-background-radius: 14 14 3 14;
+}
+.bubble-mine .bubble-text {
+    -fx-text-fill: white;
+}
+
+.bubble-theirs {
+    -fx-background-color: -fx-surface;
+    -fx-background-radius: 14 14 14 3;
+    -fx-border-color: -fx-border-soft;
+    -fx-border-radius: 14 14 14 3;
+    -fx-border-width: 1;
+}
+.bubble-theirs .bubble-text {
+    -fx-text-fill: -fx-text-main;
+}
+
+.bubble-author {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fx-text-muted;
+}
+
+.bubble-wrapper {
+    -fx-padding: 8 12 8 12;
+}
+.chat-log-compact .bubble-wrapper {
+    -fx-padding: 4 9 4 9;
+}
+
+.input-bar {
+    -fx-background-color: -fx-surface;
+    -fx-border-color: -fx-border-soft transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.empty-chat-hint {
+    -fx-text-fill: -fx-text-muted;
+    -fx-font-size: 13px;
+}

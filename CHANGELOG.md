@@ -6,6 +6,81 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.7.0 — Visual revamp + Settings menu
+
+**Why:** the whole app was styled with scattered inline `-fx-style` strings
+and the default Modena look — flat white lists, plain text rows, and no way
+to personalize anything. This pass adds a real stylesheet and a small set
+of genuinely useful client-side settings, without touching any networking
+code.
+
+- **`src/main/resources/com/synchat/styles.css`** *(new file)*
+  - A single app-wide stylesheet. Colors are declared as `-fx-*` custom
+    properties on `.root` (light theme) and re-declared on `.app-dark`
+    (dark theme) — every other rule references a token
+    (`-fx-bg`, `-fx-surface`, `-fx-accent`, etc.) instead of a literal
+    color, so flipping one style class re-themes the entire app.
+  - Adds real classes for cards (`card`), primary/outline/pill buttons,
+    text fields, list rows, chat bubbles, avatar chips, and the top/chat
+    header bars — replacing the ad hoc `.setStyle("-fx-...")` calls that
+    used to be sprinkled through the UI classes.
+
+- **`Main.java`**
+  - The `Scene` now loads `styles.css` once
+    (`scene.getStylesheets().add(...)`). Because the stylesheet lives on
+    the `Scene` rather than any one root node, it automatically applies to
+    every screen (`WelcomeView`, `LoginView`, `RegisterView`,
+    `MainChatView`) as `stage.getScene().setRoot(...)` swaps between them.
+
+- **`ui/WelcomeView.java`, `ui/LoginView.java`, `ui/RegisterView.java`**
+  - Replaced inline `-fx-style` strings with style classes (`auth-root`,
+    `card`, `app-title`/`screen-title`, `subtitle`, `status-error`,
+    `button-primary`/`button-outline`) from the new stylesheet - same
+    layout and behavior, just restyled.
+
+- **`ui/MainChatView.java`**
+  - **Settings menu** (new `Menu` next to File): a `CheckMenuItem` **Dark
+    Mode** that toggles the `app-dark` style class on the root (see
+    `applyDarkMode(...)`); a `CheckMenuItem` **Compact Messages** that
+    tightens bubble spacing/padding via a `chat-log-compact` style class
+    (see `setCompactMode(...)`); and an **About SynChat...** `MenuItem`
+    showing a static info `Alert`.
+  - A quick-access **🌙** `ToggleButton` was added to the header, next to
+    Refresh, `bindBidirectional`'d to the Dark Mode checkbox so either
+    control flips the other.
+  - Added a **"Clear view"** `Button` to the chat header bar - clears only
+    the currently displayed `chatLog`, not the saved history (a tooltip
+    says so explicitly); reopening the conversation reloads it from the
+    server as normal.
+  - Added `avatarChip(username)`: a small colored circle with the user's
+    first initial, colored deterministically from
+    `username.hashCode()` against a fixed palette, so the same person
+    always gets the same color. Used in the Online tab, the Friends tab,
+    and each pending-request row.
+  - The Online tab (`userList`) now has a custom cell factory
+    (`onlineUserCell()`) instead of showing plain text - avatar chip +
+    username.
+  - The Friends tab's cell factory (added in v1.6.0 for the Unfriend
+    button) now also shows an avatar chip and splits the name/status into
+    two stacked labels (`status-dot-online` / `status-dot-offline` style
+    classes) instead of one color-coded line of text.
+  - `appendBubble(...)` was rewritten from a single `Label` with an inline
+    background color to a small `VBox` (`bubble-mine` / `bubble-theirs`
+    style classes) with a sender-name line for the other person's messages
+    and a separate content label - closer to how a normal chat app renders
+    a bubble, and it's what `chat-log-compact` targets for the Compact
+    Messages setting.
+
+**What this does NOT do:** dark mode and compact mode are per-session
+(`MainChatView`) preferences, not saved anywhere - they reset to light/
+comfortable on next login. `WelcomeView`/`LoginView`/`RegisterView` don't
+carry the dark-mode class since they're separate scene roots created
+before a `MainChatView` exists; persisting a theme choice across the whole
+app would need a small settings store (e.g. a properties file or a new
+`users` column), which felt like more than a "minor settings" pass called for.
+
+---
+
 ## v1.6.0 — Unfriend
 
 **Why:** the Friends tab could only ever grow — accepting a request added

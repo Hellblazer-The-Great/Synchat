@@ -26,14 +26,16 @@ public class WelcomeView extends StackPane {
 
     public WelcomeView(Stage stage) {
         this.stage = stage;
+        getStyleClass().add("auth-root");
 
         Label title = new Label("SynChat");
-        title.setStyle("-fx-font-size: 32px; -fx-font-weight: bold;");
+        title.getStyleClass().add("app-title");
 
         Label subtitle = new Label("A local network instant messenger");
-        subtitle.setStyle("-fx-font-size: 14px; -fx-text-fill: gray;");
+        subtitle.getStyleClass().add("subtitle");
 
         Button hostBtn = new Button("Host on this Wi-Fi Network");
+        hostBtn.getStyleClass().add("button-primary");
         hostBtn.setMaxWidth(Double.MAX_VALUE);
         hostBtn.setOnAction(e -> host());
 
@@ -41,12 +43,13 @@ public class WelcomeView extends StackPane {
         ipField.setPromptText("Server IP (e.g. 192.168.1.23, or 127.0.0.1 for local testing)");
 
         Button joinBtn = new Button("Join a Server");
+        joinBtn.getStyleClass().add("button-outline");
         joinBtn.setMaxWidth(Double.MAX_VALUE);
         joinBtn.setOnAction(e -> join(ipField.getText().isBlank() ? "127.0.0.1" : ipField.getText().trim()));
 
         VBox box = new VBox(14, title, subtitle, new Separator(), hostBtn, new Separator(), ipField, joinBtn);
+        box.getStyleClass().add("card");
         box.setAlignment(Pos.CENTER);
-        box.setPadding(new Insets(40));
         box.setMaxWidth(440);
 
         getChildren().add(box);

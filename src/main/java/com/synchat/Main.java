@@ -15,6 +15,7 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) {
         Scene scene = new Scene(new WelcomeView(stage), 950, 620);
+        scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
         stage.setMinWidth(760);
         stage.setMinHeight(500);
         stage.setResizable(true); // explicit: the whole app window is user-resizable

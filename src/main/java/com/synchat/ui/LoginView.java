@@ -4,7 +4,6 @@ import com.synchat.net.MessageListener;
 import com.synchat.net.NetworkClient;
 import com.synchat.net.Protocol;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -30,9 +29,10 @@ public class LoginView extends StackPane {
         this.stage = stage;
         this.host = host;
         this.port = port;
+        getStyleClass().add("auth-root");
 
         Label title = new Label("Log in to SynChat");
-        title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold;");
+        title.getStyleClass().add("screen-title");
 
         TextField usernameField = new TextField();
         usernameField.setPromptText("Username");
@@ -40,10 +40,11 @@ public class LoginView extends StackPane {
         passwordField.setPromptText("Password");
 
         Label status = new Label();
-        status.setStyle("-fx-text-fill: red;");
+        status.getStyleClass().add("status-error");
         status.setWrapText(true);
 
         Button loginBtn = new Button("Log In");
+        loginBtn.getStyleClass().add("button-primary");
         loginBtn.setDefaultButton(true);
         loginBtn.setMaxWidth(Double.MAX_VALUE);
 
@@ -57,8 +58,8 @@ public class LoginView extends StackPane {
         grid.addRow(1, new Label("Password:"), passwordField);
 
         VBox box = new VBox(16, title, grid, loginBtn, registerLink, status);
+        box.getStyleClass().add("card");
         box.setAlignment(Pos.CENTER);
-        box.setPadding(new Insets(40));
         box.setMaxWidth(380);
         getChildren().add(box);
 

@@ -8,9 +8,11 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -24,12 +26,16 @@ import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -46,13 +52,18 @@ import org.json.JSONObject;
  * user resizes the application window.
  */
 public class MainChatView extends BorderPane implements MessageListener {
+    /** Deterministic per-user avatar colors - same username always gets the same chip color. */
+    private static final String[] AVATAR_PALETTE = {
+            "#5B5FEF", "#E4574C", "#2E9E5B", "#D98C22", "#1FA9C0", "#9B51E0", "#C2185B", "#3F51B5"
+    };
+
     private final NetworkClient client;
     private final String myUsername;
     private final ObservableList<String> onlineUsers = FXCollections.observableArrayList();
     private final ListView<String> userList = new ListView<>(onlineUsers);
     private final ObservableList<String> friendUsernames = FXCollections.observableArrayList();
     private final ListView<String> friendsListView = new ListView<>(friendUsernames);
-    private final VBox chatLog = new VBox(6);
+    private final VBox chatLog = new VBox(8);
     private final TextField inputField = new TextField();
     private final Label chatHeader = new Label("Select an online user to start chatting");
     private String activeChatPartner = null;
@@ -90,27 +101,84 @@ public class MainChatView extends BorderPane implements MessageListener {
 
     private VBox buildTop() {
         MenuBar menuBar = new MenuBar();
+        menuBar.getStyleClass().add("menu-bar");
         Menu fileMenu = new Menu("File");
         menuBar.getMenus().add(fileMenu);
         fileMenu.setId("fileMenu");
 
+        // SETTINGS MENU - minor, purely client-side preferences. None of
+        // these touch the network protocol: dark mode and compact mode are
+        // just style-class toggles, and About is a static info dialog.
+        Menu settingsMenu = new Menu("Settings");
+        menuBar.getMenus().add(settingsMenu);
+
+        CheckMenuItem darkModeItem = new CheckMenuItem("Dark Mode");
+        CheckMenuItem compactItem = new CheckMenuItem("Compact Messages");
+        MenuItem aboutItem = new MenuItem("About SynChat...");
+        settingsMenu.getItems().addAll(darkModeItem, compactItem, new SeparatorMenuItem(), aboutItem);
+
+        compactItem.selectedProperty().addListener((obs, was, isCompact) -> setCompactMode(isCompact));
+        aboutItem.setOnAction(e -> showAboutDialog());
+
         Label quoteLabel = new Label("Loading today's quote...");
-        quoteLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
+        quoteLabel.getStyleClass().add("quote-label");
         quoteLabel.setWrapText(true);
-        quoteLabel.maxWidthProperty().bind(this.widthProperty().subtract(290)); // RESPONSIVENESS
+        quoteLabel.maxWidthProperty().bind(this.widthProperty().subtract(360)); // RESPONSIVENESS
         new QuoteService().fetchDailyQuote(quoteLabel::setText);
 
         Button refreshBtn = new Button("\u27F3 Refresh");
+        refreshBtn.getStyleClass().add("button-pill");
         refreshBtn.setTooltip(new Tooltip(
                 "Re-fetch who's online, your friends, and pending requests"));
         refreshBtn.setOnAction(e -> requestFullRefresh());
 
-        HBox header = new HBox(16, new Label("Logged in as: " + myUsername), quoteLabel, refreshBtn);
-        header.setPadding(new Insets(6, 12, 6, 12));
+        // Quick-access dark mode toggle, kept in sync with the Settings menu
+        // checkbox so either one can flip it.
+        ToggleButton darkModeToggle = new ToggleButton("\uD83C\uDF19");
+        darkModeToggle.getStyleClass().add("icon-toggle-button");
+        darkModeToggle.setTooltip(new Tooltip("Toggle dark mode"));
+        darkModeToggle.selectedProperty().bindBidirectional(darkModeItem.selectedProperty());
+        darkModeToggle.selectedProperty().addListener((obs, was, isDark) -> applyDarkMode(isDark));
+
+        Label loggedInLabel = new Label("Logged in as: " + myUsername);
+        loggedInLabel.getStyleClass().add("logged-in-label");
+
+        HBox header = new HBox(14, loggedInLabel, quoteLabel, darkModeToggle, refreshBtn);
+        header.getStyleClass().add("top-bar");
+        header.setPadding(new Insets(8, 14, 8, 14));
         header.setAlignment(Pos.CENTER_LEFT);
-        HBox.setHgrow(quoteLabel, Priority.ALWAYS); // RESPONSIVENESS: quote fills the gap, button stays put
+        HBox.setHgrow(quoteLabel, Priority.ALWAYS); // RESPONSIVENESS: quote fills the gap, buttons stay put
 
         return new VBox(menuBar, header);
+    }
+
+    /** Toggles the "app-dark" style class on the root - see styles.css for the light/dark tokens it swaps. */
+    private void applyDarkMode(boolean dark) {
+        if (dark) {
+            if (!getStyleClass().contains("app-dark")) getStyleClass().add("app-dark");
+        } else {
+            getStyleClass().remove("app-dark");
+        }
+    }
+
+    /** Tightens bubble padding/spacing for people who'd rather see more history at once. */
+    private void setCompactMode(boolean compact) {
+        chatLog.setSpacing(compact ? 3 : 8);
+        if (compact) {
+            if (!chatLog.getStyleClass().contains("chat-log-compact")) chatLog.getStyleClass().add("chat-log-compact");
+        } else {
+            chatLog.getStyleClass().remove("chat-log-compact");
+        }
+    }
+
+    private void showAboutDialog() {
+        Alert about = new Alert(Alert.AlertType.INFORMATION);
+        about.setTitle("About SynChat");
+        about.setHeaderText("SynChat");
+        about.setContentText("A local network instant messenger.\n\nLogged in as: " + myUsername
+                + "\nBuilt with JavaFX, a multi-threaded Java socket server, and SQLite.");
+        about.setResizable(true);
+        about.showAndWait();
     }
 
     /**
@@ -173,6 +241,7 @@ public class MainChatView extends BorderPane implements MessageListener {
         TabPane tabs = new TabPane();
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
+        userList.setCellFactory(lv -> onlineUserCell());
         Tab onlineTab = new Tab("Online", userList);
         userList.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
             if (selected != null) openConversation(selected);
@@ -184,11 +253,15 @@ public class MainChatView extends BorderPane implements MessageListener {
         // that USER_LIST broadcasts already keep up to date.
         friendsListView.setCellFactory(lv -> new ListCell<>() {
             private final Label nameLabel = new Label();
+            private final Label statusLabel = new Label();
+            private final VBox textBox = new VBox(1, nameLabel, statusLabel);
+            private final Region spacer = new Region();
             private final Button unfriendBtn = new Button("Unfriend");
-            private final HBox row = new HBox(8, nameLabel, unfriendBtn);
+            private final HBox row = new HBox(10);
             {
                 row.setAlignment(Pos.CENTER_LEFT);
-                HBox.setHgrow(nameLabel, Priority.ALWAYS);
+                HBox.setHgrow(spacer, Priority.ALWAYS);
+                unfriendBtn.getStyleClass().add("button-pill-danger");
                 // getItem() is safe here: this handler only ever fires from a
                 // fully-populated (non-empty) cell the user is looking at.
                 unfriendBtn.setOnAction(e -> confirmAndUnfriend(getItem()));
@@ -201,8 +274,10 @@ public class MainChatView extends BorderPane implements MessageListener {
                     setGraphic(null);
                 } else {
                     boolean isOnline = onlineUsers.contains(friendUsername);
-                    nameLabel.setText(friendUsername + "   \u2022   " + (isOnline ? "Online" : "Offline"));
-                    nameLabel.setTextFill(isOnline ? Color.web("#2e7d32") : Color.GRAY);
+                    nameLabel.setText(friendUsername);
+                    statusLabel.setText(isOnline ? "Online" : "Offline");
+                    statusLabel.getStyleClass().setAll(isOnline ? "status-dot-online" : "status-dot-offline");
+                    row.getChildren().setAll(avatarChip(friendUsername), textBox, spacer, unfriendBtn);
                     setGraphic(row);
                 }
             }
@@ -224,28 +299,81 @@ public class MainChatView extends BorderPane implements MessageListener {
         VBox.setVgrow(tabs, Priority.ALWAYS);
 
         VBox sidebar = new VBox(tabs);
+        sidebar.getStyleClass().add("sidebar");
         sidebar.setMinWidth(160);
         return sidebar;
     }
 
+    /** Plain rows for the Online tab: avatar chip + username, no actions. */
+    private ListCell<String> onlineUserCell() {
+        return new ListCell<>() {
+            private final Label nameLabel = new Label();
+            private final HBox row = new HBox(10, nameLabel);
+            {
+                row.setAlignment(Pos.CENTER_LEFT);
+            }
+
+            @Override
+            protected void updateItem(String username, boolean empty) {
+                super.updateItem(username, empty);
+                if (empty || username == null) {
+                    setGraphic(null);
+                } else {
+                    nameLabel.setText(username);
+                    row.getChildren().setAll(avatarChip(username), nameLabel);
+                    setGraphic(row);
+                }
+            }
+        };
+    }
+
+    /** A small colored circle with the user's first initial - a deterministic color per username. */
+    private static Node avatarChip(String username) {
+        Circle circle = new Circle(14);
+        String initial = username.isEmpty() ? "?" : username.substring(0, 1).toUpperCase();
+        circle.setFill(Color.web(AVATAR_PALETTE[Math.floorMod(username.hashCode(), AVATAR_PALETTE.length)]));
+        Label initialLabel = new Label(initial);
+        initialLabel.getStyleClass().add("avatar-chip-label");
+        StackPane chip = new StackPane(circle, initialLabel);
+        chip.getStyleClass().add("avatar-chip");
+        return chip;
+    }
+
     private BorderPane buildChatArea() {
         BorderPane chatArea = new BorderPane();
+        chatArea.getStyleClass().add("chat-area");
 
-        chatHeader.setStyle("-fx-font-weight: bold; -fx-padding: 8;");
-        chatArea.setTop(chatHeader);
+        chatHeader.getStyleClass().add("chat-header-label");
+
+        Button clearViewBtn = new Button("Clear view");
+        clearViewBtn.getStyleClass().add("button-pill");
+        clearViewBtn.setTooltip(new Tooltip(
+                "Clears this window only - your saved history is untouched and reloads next time you open this chat"));
+        clearViewBtn.setOnAction(e -> chatLog.getChildren().clear());
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox chatHeaderBar = new HBox(10, chatHeader, spacer, clearViewBtn);
+        chatHeaderBar.getStyleClass().add("chat-header-bar");
+        chatHeaderBar.setAlignment(Pos.CENTER_LEFT);
+        chatHeaderBar.setPadding(new Insets(10, 14, 10, 14));
+        chatArea.setTop(chatHeaderBar);
 
         ScrollPane scrollPane = new ScrollPane(chatLog);
+        scrollPane.getStyleClass().add("chat-scroll");
         scrollPane.setFitToWidth(true);
-        chatLog.setPadding(new Insets(10));
+        chatLog.setPadding(new Insets(14));
         chatArea.setCenter(scrollPane);
 
         inputField.setPromptText("Type a message and press Enter...");
         Button sendBtn = new Button("Send");
+        sendBtn.getStyleClass().add("button-primary");
         sendBtn.setOnAction(e -> sendCurrentMessage());
         inputField.setOnAction(e -> sendCurrentMessage());
 
         HBox inputBar = new HBox(8, inputField, sendBtn);
-        inputBar.setPadding(new Insets(8));
+        inputBar.getStyleClass().add("input-bar");
+        inputBar.setPadding(new Insets(10, 14, 10, 14));
         HBox.setHgrow(inputField, Priority.ALWAYS); // RESPONSIVENESS: field grows, button stays fixed size
         chatArea.setBottom(inputBar);
 
@@ -267,7 +395,9 @@ public class MainChatView extends BorderPane implements MessageListener {
     private void rebuildRequestsBox() {
         requestsBox.getChildren().clear();
         if (pendingRequests.isEmpty()) {
-            requestsBox.getChildren().add(new Label("No pending friend requests."));
+            Label empty = new Label("No pending friend requests.");
+            empty.getStyleClass().add("requests-empty");
+            requestsBox.getChildren().add(empty);
             return;
         }
         for (IncomingRequest req : pendingRequests) {
@@ -275,12 +405,15 @@ public class MainChatView extends BorderPane implements MessageListener {
             HBox.setHgrow(name, Priority.ALWAYS);
 
             Button accept = new Button("Accept");
+            accept.getStyleClass().add("button-pill-accept");
             accept.setOnAction(e -> respondToRequest(req, true));
 
             Button decline = new Button("Decline");
+            decline.getStyleClass().add("button-pill-danger");
             decline.setOnAction(e -> respondToRequest(req, false));
 
-            HBox row = new HBox(8, name, accept, decline);
+            HBox row = new HBox(8, avatarChip(req.fromUsername()), name, accept, decline);
+            row.getStyleClass().add("request-row");
             row.setAlignment(Pos.CENTER_LEFT);
             requestsBox.getChildren().add(row);
         }
@@ -344,11 +477,20 @@ public class MainChatView extends BorderPane implements MessageListener {
     }
 
     private void appendBubble(String author, String content, boolean mine) {
-        Label bubble = new Label(author + ": " + content);
-        bubble.setWrapText(true);
-        bubble.setPadding(new Insets(8));
-        bubble.setStyle("-fx-background-color: " + (mine ? "#DCF8C6" : "#F1F0F0") + "; -fx-background-radius: 10;");
-        bubble.maxWidthProperty().bind(chatLog.widthProperty().multiply(0.75)); // RESPONSIVENESS
+        VBox bubble = new VBox(2);
+        bubble.getStyleClass().addAll(mine ? "bubble-mine" : "bubble-theirs", "bubble-wrapper");
+        bubble.maxWidthProperty().bind(chatLog.widthProperty().multiply(0.72)); // RESPONSIVENESS
+
+        if (!mine) {
+            Label authorLabel = new Label(author);
+            authorLabel.getStyleClass().add("bubble-author");
+            bubble.getChildren().add(authorLabel);
+        }
+        Label contentLabel = new Label(content);
+        contentLabel.getStyleClass().add("bubble-text");
+        contentLabel.setWrapText(true);
+        bubble.getChildren().add(contentLabel);
+
         HBox row = new HBox(bubble);
         row.setAlignment(mine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
         chatLog.getChildren().add(row);
