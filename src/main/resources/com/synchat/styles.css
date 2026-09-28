@@ -226,6 +226,9 @@ Label { -fx-text-fill: -fx-text-main; }
     -fx-text-fill: -fx-accent;
     -fx-font-weight: bold;
 }
+.tab-pane .tab-content-area {
+    -fx-background-color: -fx-surface;
+}
 
 .list-view {
     -fx-background-color: transparent;
@@ -280,6 +283,20 @@ Label { -fx-text-fill: -fx-text-main; }
     -fx-background: transparent;
 }
 
+/*
+ * DARK MODE FIX: unlike userList/friendsListView (ListView, styled via
+ * .list-view below), the Requests tab's content sits in a plain ScrollPane
+ * that never had its own style class - it just fell back to JavaFX's
+ * default (light) viewport background, so it stood out as a bright panel
+ * once everything around it went dark. Same transparent treatment as
+ * .chat-scroll, just also covering the nested .viewport region.
+ */
+.requests-scroll,
+.requests-scroll .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
 .chat-header-bar {
     -fx-background-color: -fx-surface;
     -fx-border-color: transparent transparent -fx-border-soft transparent;
@@ -327,9 +344,6 @@ Label { -fx-text-fill: -fx-text-main; }
 
 .bubble-wrapper {
     -fx-padding: 8 12 8 12;
-}
-.chat-log-compact .bubble-wrapper {
-    -fx-padding: 4 9 4 9;
 }
 
 .input-bar {

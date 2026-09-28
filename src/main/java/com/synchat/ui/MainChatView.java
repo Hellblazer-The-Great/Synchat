@@ -89,7 +89,7 @@ public class MainChatView extends BorderPane implements MessageListener {
         // the Refresh button (see buildTop()).
         requestFullRefresh();
 
-        setTop(buildTop());
+        setTop(buildTop(stage));
 
         SplitPane splitPane = new SplitPane();
         splitPane.getItems().addAll(buildSidebar(), buildChatArea());
@@ -103,28 +103,37 @@ public class MainChatView extends BorderPane implements MessageListener {
         });
 
         setPrefSize(900, 600);
-        setupFileMenuActions(stage);
     }
 
-    private VBox buildTop() {
+    private VBox buildTop(Stage stage) {
         MenuBar menuBar = new MenuBar();
         menuBar.getStyleClass().add("menu-bar");
-        Menu fileMenu = new Menu("File");
-        menuBar.getMenus().add(fileMenu);
-        fileMenu.setId("fileMenu");
 
-        // SETTINGS MENU - minor, purely client-side preferences. None of
-        // these touch the network protocol: dark mode and compact mode are
-        // just style-class toggles, and About is a static info dialog.
+        // SETTINGS - the app's only menu now that "Add Friend..." lives next
+        // to each online user (see onlineUserCell()) and Compact Messages is
+        // gone. Log Out/Exit live here too since there's no longer a
+        // separate File menu to hold them.
         Menu settingsMenu = new Menu("Settings");
         menuBar.getMenus().add(settingsMenu);
 
         CheckMenuItem darkModeItem = new CheckMenuItem("Dark Mode");
-        CheckMenuItem compactItem = new CheckMenuItem("Compact Messages");
         MenuItem aboutItem = new MenuItem("About SynChat...");
-        settingsMenu.getItems().addAll(darkModeItem, compactItem, new SeparatorMenuItem(), aboutItem);
 
-        compactItem.selectedProperty().addListener((obs, was, isCompact) -> setCompactMode(isCompact));
+        MenuItem logout = new MenuItem("Log Out");
+        logout.setOnAction(e -> {
+            client.close();
+            stage.getScene().setRoot(new WelcomeView(stage));
+        });
+
+        MenuItem exit = new MenuItem("Exit");
+        exit.setOnAction(e -> {
+            client.close();
+            stage.close();
+        });
+
+        settingsMenu.getItems().addAll(darkModeItem, new SeparatorMenuItem(), aboutItem,
+                new SeparatorMenuItem(), logout, exit);
+
         aboutItem.setOnAction(e -> showAboutDialog());
 
         Label quoteLabel = new Label("Loading today's quote...");
@@ -168,16 +177,6 @@ public class MainChatView extends BorderPane implements MessageListener {
         }
     }
 
-    /** Tightens bubble padding/spacing for people who'd rather see more history at once. */
-    private void setCompactMode(boolean compact) {
-        chatLog.setSpacing(compact ? 3 : 8);
-        if (compact) {
-            if (!chatLog.getStyleClass().contains("chat-log-compact")) chatLog.getStyleClass().add("chat-log-compact");
-        } else {
-            chatLog.getStyleClass().remove("chat-log-compact");
-        }
-    }
-
     private void showAboutDialog() {
         Alert about = new Alert(Alert.AlertType.INFORMATION);
         about.setTitle("About SynChat");
@@ -211,41 +210,12 @@ public class MainChatView extends BorderPane implements MessageListener {
         client.send(refreshRequests);
     }
 
-    private void setupFileMenuActions(Stage stage) {
-        MenuBar menuBar = (MenuBar) ((VBox) getTop()).getChildren().get(0);
-        Menu fileMenu = menuBar.getMenus().get(0);
-
-        MenuItem addFriend = new MenuItem("Add Friend...");
-        addFriend.setOnAction(e -> {
-            TextInputDialog dialog = new TextInputDialog();
-            dialog.setHeaderText("Send a friend request");
-            dialog.setContentText("Username:");
-            dialog.setResizable(true);
-            dialog.showAndWait().ifPresent(uname -> {
-                if (uname.equals(myUsername)) {
-                    showResizableAlert(Alert.AlertType.WARNING, "You can't send a friend request to yourself.");
-                    return;
-                }
-                JSONObject req = new JSONObject();
-                req.put("type", Protocol.FRIEND_REQUEST);
-                req.put("username", uname);
-                client.send(req);
-            });
-        });
-
-        MenuItem logout = new MenuItem("Log Out");
-        logout.setOnAction(e -> {
-            client.close();
-            stage.getScene().setRoot(new WelcomeView(stage));
-        });
-
-        MenuItem exit = new MenuItem("Exit");
-        exit.setOnAction(e -> {
-            client.close();
-            stage.close();
-        });
-
-        fileMenu.getItems().addAll(addFriend, new SeparatorMenuItem(), logout, exit);
+    /** Sends a FRIEND_REQUEST for a specific username - used by each online row's "Add Friend" button. */
+    private void sendFriendRequest(String username) {
+        JSONObject req = new JSONObject();
+        req.put("type", Protocol.FRIEND_REQUEST);
+        req.put("username", username);
+        client.send(req);
     }
 
     private VBox buildSidebar() {
@@ -303,6 +273,7 @@ public class MainChatView extends BorderPane implements MessageListener {
         this.requestsBox = requestsBox;
         rebuildRequestsBox();
         ScrollPane requestsScroll = new ScrollPane(requestsBox);
+        requestsScroll.getStyleClass().add("requests-scroll");
         requestsScroll.setFitToWidth(true);
         Tab requestsTab = new Tab("Requests", requestsScroll);
 
@@ -315,13 +286,20 @@ public class MainChatView extends BorderPane implements MessageListener {
         return sidebar;
     }
 
-    /** Plain rows for the Online tab: avatar chip + username, no actions. */
+    /** Online tab rows: avatar chip + username, plus an "Add Friend" button (hidden once you're already friends). */
     private ListCell<String> onlineUserCell() {
         return new ListCell<>() {
             private final Label nameLabel = new Label();
-            private final HBox row = new HBox(10, nameLabel);
+            private final Region spacer = new Region();
+            private final Button addFriendBtn = new Button("Add Friend");
+            private final HBox row = new HBox(10);
             {
                 row.setAlignment(Pos.CENTER_LEFT);
+                HBox.setHgrow(spacer, Priority.ALWAYS);
+                addFriendBtn.getStyleClass().add("button-pill-accept");
+                // getItem() is safe here: this handler only ever fires from a
+                // fully-populated (non-empty) cell the user is looking at.
+                addFriendBtn.setOnAction(e -> sendFriendRequest(getItem()));
             }
 
             @Override
@@ -331,7 +309,10 @@ public class MainChatView extends BorderPane implements MessageListener {
                     setGraphic(null);
                 } else {
                     nameLabel.setText(username);
-                    row.getChildren().setAll(avatarChip(username), nameLabel);
+                    boolean alreadyFriends = friendUsernames.contains(username);
+                    addFriendBtn.setVisible(!alreadyFriends);
+                    addFriendBtn.setManaged(!alreadyFriends);
+                    row.getChildren().setAll(avatarChip(username), nameLabel, spacer, addFriendBtn);
                     setGraphic(row);
                 }
             }
@@ -620,6 +601,7 @@ public class MainChatView extends BorderPane implements MessageListener {
                 friendUsernames.clear();
                 JSONArray arr = json.getJSONArray("friends");
                 for (int i = 0; i < arr.length(); i++) friendUsernames.add(arr.getString(i));
+                userList.refresh(); // re-render the Online tab so "Add Friend" hides for new friends
             }
             case Protocol.FRIEND_REQUESTS_LIST -> {
                 pendingRequests.clear();

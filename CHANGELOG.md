@@ -6,6 +6,46 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.9.0 — Per-user Add Friend, single Settings menu, Requests dark-mode fix
+
+**Why:** "Add Friend..." required knowing someone's exact username and
+digging into a File menu to type it in, even when they were sitting right
+there in the Online tab. Compact Messages turned out not to pull its
+weight as a setting. And the Requests tab's plain `ScrollPane` (unlike the
+Online/Friends tabs' `ListView`s) never got a dark-mode background of its
+own, so it showed up as a bright panel once the rest of the app went dark.
+
+- **`ui/MainChatView.java`**
+  - `onlineUserCell()` now renders an **Add Friend** button (styled like
+    the Accept button, same row layout pattern as the Friends tab's
+    Unfriend button) beside each online user, hidden once you're already
+    friends with them (checked against `friendUsernames`). The `FRIENDS_LIST`
+    case in `onServerEvent(...)` now calls `userList.refresh()` so that
+    button disappears the moment a request is accepted, without needing a
+    manual refresh.
+  - Removed the **File** menu entirely - `MenuItem addFriend` is gone
+    (superseded by the per-row button above), and **Log Out**/**Exit** now
+    live at the bottom of the **Settings** menu, which is the app's only
+    menu now. `buildTop()` takes `Stage stage` directly so it can wire
+    those two without the old cast-and-lookup `setupFileMenuActions(...)`
+    helper, which is also gone.
+  - Removed **Compact Messages** - the `CheckMenuItem`, `setCompactMode(...)`,
+    and the `chat-log-compact` style class toggle are all gone; `chatLog`
+    just keeps its normal spacing.
+  - `requestsScroll` (the Requests tab's `ScrollPane`) now carries a
+    `requests-scroll` style class instead of no styling at all.
+
+- **`resources/com/synchat/styles.css`**
+  - Added `.requests-scroll`/`.requests-scroll .viewport` (transparent, same
+    treatment `.chat-scroll` already used) and `.tab-pane .tab-content-area`
+    (pinned to `-fx-surface`) so every sidebar tab's content area is themed
+    consistently instead of falling back to JavaFX's default light
+    background - this is what was making the Requests tab look broken in
+    dark mode specifically.
+  - Removed the now-unused `.chat-log-compact` rule.
+
+---
+
 ## v1.8.1 — Can't friend-request yourself
 
 - **`server/ClientHandler.java`** — `handleFriendRequest(...)` now rejects
