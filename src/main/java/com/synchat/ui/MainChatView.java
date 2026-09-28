@@ -244,6 +244,11 @@ public class MainChatView extends BorderPane implements MessageListener {
         activeChatPartner = username;
         chatHeader.setText("Chat with " + username);
         chatLog.getChildren().clear();
+
+        JSONObject req = new JSONObject();
+        req.put("type", Protocol.REQUEST_HISTORY);
+        req.put("with", username);
+        client.send(req);
     }
 
     /** Redraws the Requests tab from the current pendingRequests list. */
@@ -323,6 +328,19 @@ public class MainChatView extends BorderPane implements MessageListener {
                 boolean mine = from.equals(myUsername);
                 if (activeChatPartner != null && (from.equals(activeChatPartner) || mine)) {
                     appendBubble(from, json.getString("content"), mine);
+                }
+            }
+            case Protocol.MESSAGE_HISTORY -> {
+                // Guard against a late reply for a conversation the user has
+                // already navigated away from by the time it arrives.
+                if (json.getString("with").equals(activeChatPartner)) {
+                    chatLog.getChildren().clear();
+                    JSONArray history = json.getJSONArray("messages");
+                    for (int i = 0; i < history.length(); i++) {
+                        JSONObject m = history.getJSONObject(i);
+                        String from = m.getString("from");
+                        appendBubble(from, m.getString("content"), from.equals(myUsername));
+                    }
                 }
             }
             case Protocol.FRIENDS_LIST -> {

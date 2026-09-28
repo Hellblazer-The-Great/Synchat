@@ -65,6 +65,7 @@ public class ClientHandler implements Runnable {
                 case Protocol.FRIEND_REQUEST -> handleFriendRequest(json);
                 case Protocol.FRIEND_RESPONSE -> handleFriendResponse(json);
                 case Protocol.MESSAGE -> handleMessage(json);
+                case Protocol.REQUEST_HISTORY -> handleHistoryRequest(json);
                 case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
                 case Protocol.REQUEST_FRIEND_REQUESTS -> sendPendingFriendRequestsToSelf();
                 case Protocol.REQUEST_FRIENDS_LIST -> sendFriendsListToSelf();
@@ -190,6 +191,40 @@ public class ClientHandler implements Runnable {
         ClientHandler recipientHandler = server.getHandler(recipient.getUsername());
         if (recipientHandler != null) recipientHandler.send(payload); // instant delivery if online
         send(payload); // echo back to sender so their own chat log shows it
+    }
+
+    /**
+     * DATA MANIPULATION - the "READ" half of the messages CRUD that the UI
+     * actually uses: pulls the full saved back-and-forth with one other
+     * user out of SQLite (MessageRepository.findConversation, persisted by
+     * handleMessage() above regardless of whether either side was online at
+     * the time) and sends it back to just the requester. This is what makes
+     * chat history survive closing the app and logging back in later.
+     */
+    private void handleHistoryRequest(JSONObject json) throws SQLException {
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+        MessageRepository messages = new MessageRepository(Database.getInstance().getConnection());
+
+        User other = users.findByUsername(json.getString("with"));
+        if (other == null) {
+            sendError("No such user");
+            return;
+        }
+
+        JSONArray arr = new JSONArray();
+        for (Message m : messages.findConversation(userId, other.getId())) {
+            JSONObject o = new JSONObject();
+            o.put("from", m.getSenderId() == userId ? username : other.getUsername());
+            o.put("content", m.getContent());
+            o.put("timestamp", m.getTimestamp());
+            arr.put(o);
+        }
+
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.MESSAGE_HISTORY);
+        payload.put("with", other.getUsername());
+        payload.put("messages", arr);
+        send(payload);
     }
 
     /**

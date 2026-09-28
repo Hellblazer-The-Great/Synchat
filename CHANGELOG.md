@@ -6,6 +6,38 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.5.0 — Persistent chat history
+
+**Why:** messages were always being saved to `synchat.db` via
+`MessageRepository.create()`, but nothing ever asked for them back —
+opening a conversation, or logging back in after closing the app, always
+started with a blank chat log even though the history was sitting right
+there in SQLite the whole time.
+
+- **`net/Protocol.java`**
+  - Added `REQUEST_HISTORY` (client → server) and `HISTORY` (server →
+    client) message type constants.
+
+- **`server/ClientHandler.java`**
+  - Added `handleHistoryRequest(json)` and a `REQUEST_HISTORY` case in the
+    `handle()` switch. It calls the already-existing
+    `MessageRepository.findConversation(userId, otherId)` (this method
+    existed since v1.0.0 but was never actually wired to anything) and
+    sends the full saved thread back to just the requester as a `HISTORY`
+    payload: `{"type":"HISTORY","with":"bob","messages":[{"from":...,"content":...,"timestamp":...}, ...]}`.
+
+- **`ui/MainChatView.java`**
+  - `openConversation(username)` now sends a `REQUEST_HISTORY` message the
+    moment a conversation is opened (from either the Online or Friends
+    tab), in addition to clearing the chat log.
+  - `onServerEvent(...)` gained a `HISTORY` case that repopulates the chat
+    log with every saved message, in order, using the same `appendBubble(...)`
+    used for live messages - and checks the payload's `with` field against
+    the currently-open conversation before rendering, in case the reply
+    arrives after the user has already switched to a different chat.
+
+---
+
 ## v1.4.0 — Manual refresh button
 
 **Why:** live server broadcasts keep the Online/Friends/Requests lists
