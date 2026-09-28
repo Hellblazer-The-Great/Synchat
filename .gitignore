@@ -1,5 +1,18 @@
-﻿target/
+# Build output
+target/
 *.class
+
+# Runtime SQLite database (regenerated automatically on first run)
+synchat.db
+
+# IDE files
 .idea/
 *.iml
 .vscode/
+.settings/
+.classpath
+.project
+
+# OS junk
+.DS_Store
+Thumbs.db

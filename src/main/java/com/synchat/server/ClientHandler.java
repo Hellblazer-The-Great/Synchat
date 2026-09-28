@@ -65,6 +65,7 @@ public class ClientHandler implements Runnable {
                 case Protocol.FRIEND_REQUEST -> handleFriendRequest(json);
                 case Protocol.FRIEND_RESPONSE -> handleFriendResponse(json);
                 case Protocol.MESSAGE -> handleMessage(json);
+                case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
                 default -> sendError("Unknown command: " + type);
             }
         } catch (SQLException e) {
@@ -81,13 +82,13 @@ public class ClientHandler implements Runnable {
         }
         User created = users.create(new User(0, uname,
                 UserRepository.hashPassword(json.getString("password")), User.Status.ONLINE, null));
+        respondAuth(created != null, created);
         if (created != null) {
             this.username = created.getUsername();
             this.userId = created.getId();
             server.registerOnline(username, this);
+            broadcastUserList();
         }
-        respondAuth(created != null, created);
-        broadcastUserList();
     }
 
     private void handleLogin(JSONObject json) throws SQLException {
@@ -165,14 +166,42 @@ public class ClientHandler implements Runnable {
         send(payload); // echo back to sender so their own chat log shows it
     }
 
+    /**
+     * Pushes the current roster to everyone. This alone is NOT enough to
+     * keep every client in sync: a client that is still transitioning from
+     * the login screen to the chat screen when this fires can miss it (see
+     * sendUserListToSelf() below for why that no longer matters).
+     */
     private void broadcastUserList() {
-        JSONObject payload = new JSONObject();
-        payload.put("type", Protocol.USER_LIST);
-        payload.put("users", new JSONArray(server.getOnlineUsernames()));
+        JSONObject payload = buildUserListPayload();
         for (String uname : server.getOnlineUsernames()) {
             ClientHandler h = server.getHandler(uname);
             if (h != null) h.send(payload);
         }
+    }
+
+    /**
+     * FIX for the "wrong online count" bug: a client's socket listener is
+     * briefly still pointed at the login screen's temporary listener while
+     * MainChatView is being constructed (Platform.runLater is queued, not
+     * instant). If a USER_LIST broadcast lands in that gap, it's silently
+     * dropped, and the new client is stuck showing a stale/empty list until
+     * some other unrelated event happens to trigger another broadcast.
+     *
+     * Rather than trying to close that timing gap, the client explicitly
+     * asks for a fresh snapshot (REQUEST_USER_LIST) the moment MainChatView
+     * finishes wiring itself up as the listener - guaranteeing it always
+     * gets an accurate roster regardless of any earlier missed broadcast.
+     */
+    private void sendUserListToSelf() {
+        send(buildUserListPayload());
+    }
+
+    private JSONObject buildUserListPayload() {
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.USER_LIST);
+        payload.put("users", new JSONArray(server.getOnlineUsernames()));
+        return payload;
     }
 
     private void sendError(String message) {

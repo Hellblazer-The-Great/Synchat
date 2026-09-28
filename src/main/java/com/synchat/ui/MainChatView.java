@@ -56,6 +56,13 @@ public class MainChatView extends BorderPane implements MessageListener {
         this.myUsername = myUsername;
         client.setListener(this);
 
+        // FIX: don't rely solely on the server's login-time broadcast, which
+        // can land while we were still transitioning screens and get missed.
+        // Ask for a guaranteed-fresh roster now that we're definitely listening.
+        JSONObject refresh = new JSONObject();
+        refresh.put("type", Protocol.REQUEST_USER_LIST);
+        client.send(refresh);
+
         setTop(buildTop());
 
         SplitPane splitPane = new SplitPane();

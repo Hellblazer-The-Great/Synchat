@@ -14,6 +14,7 @@ public final class Protocol {
     public static final String FRIEND_REQUEST = "FRIEND_REQUEST";
     public static final String FRIEND_RESPONSE = "FRIEND_RESPONSE";
     public static final String USER_LIST = "USER_LIST";
+    public static final String REQUEST_USER_LIST = "REQUEST_USER_LIST";
     public static final String MESSAGE = "MESSAGE";
     public static final String ERROR = "ERROR";
 }
