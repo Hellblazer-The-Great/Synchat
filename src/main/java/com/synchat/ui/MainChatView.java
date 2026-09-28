@@ -11,6 +11,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -26,6 +27,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -46,6 +48,8 @@ public class MainChatView extends BorderPane implements MessageListener {
     private final String myUsername;
     private final ObservableList<String> onlineUsers = FXCollections.observableArrayList();
     private final ListView<String> userList = new ListView<>(onlineUsers);
+    private final ObservableList<String> friendUsernames = FXCollections.observableArrayList();
+    private final ListView<String> friendsListView = new ListView<>(friendUsernames);
     private final VBox chatLog = new VBox(6);
     private final TextField inputField = new TextField();
     private final Label chatHeader = new Label("Select an online user to start chatting");
@@ -68,6 +72,10 @@ public class MainChatView extends BorderPane implements MessageListener {
         JSONObject refreshRequests = new JSONObject();
         refreshRequests.put("type", Protocol.REQUEST_FRIEND_REQUESTS);
         client.send(refreshRequests);
+
+        JSONObject refreshFriends = new JSONObject();
+        refreshFriends.put("type", Protocol.REQUEST_FRIENDS_LIST);
+        client.send(refreshFriends);
 
         setTop(buildTop());
 
@@ -147,6 +155,29 @@ public class MainChatView extends BorderPane implements MessageListener {
             if (selected != null) openConversation(selected);
         });
 
+        // FRIENDS TAB: a persistent list of accepted friends, independent of
+        // who happens to be connected right now. Each row shows a live
+        // Online/Offline indicator by cross-referencing the onlineUsers list
+        // that USER_LIST broadcasts already keep up to date.
+        friendsListView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(String friendUsername, boolean empty) {
+                super.updateItem(friendUsername, empty);
+                if (empty || friendUsername == null) {
+                    setText(null);
+                    setTextFill(Color.BLACK);
+                } else {
+                    boolean isOnline = onlineUsers.contains(friendUsername);
+                    setText(friendUsername + "   \u2022   " + (isOnline ? "Online" : "Offline"));
+                    setTextFill(isOnline ? Color.web("#2e7d32") : Color.GRAY);
+                }
+            }
+        });
+        friendsListView.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
+            if (selected != null) openConversation(selected);
+        });
+        Tab friendsTab = new Tab("Friends", friendsListView);
+
         VBox requestsBox = new VBox(8);
         requestsBox.setPadding(new Insets(10));
         this.requestsBox = requestsBox;
@@ -155,7 +186,7 @@ public class MainChatView extends BorderPane implements MessageListener {
         requestsScroll.setFitToWidth(true);
         Tab requestsTab = new Tab("Requests", requestsScroll);
 
-        tabs.getTabs().addAll(onlineTab, requestsTab);
+        tabs.getTabs().addAll(onlineTab, friendsTab, requestsTab);
         VBox.setVgrow(tabs, Priority.ALWAYS);
 
         VBox sidebar = new VBox(tabs);
@@ -263,6 +294,7 @@ public class MainChatView extends BorderPane implements MessageListener {
                     String u = arr.getString(i);
                     if (!u.equals(myUsername)) onlineUsers.add(u);
                 }
+                friendsListView.refresh(); // re-render Online/Offline labels in the Friends tab
             }
             case Protocol.MESSAGE -> {
                 String from = json.getString("from");
@@ -270,6 +302,11 @@ public class MainChatView extends BorderPane implements MessageListener {
                 if (activeChatPartner != null && (from.equals(activeChatPartner) || mine)) {
                     appendBubble(from, json.getString("content"), mine);
                 }
+            }
+            case Protocol.FRIENDS_LIST -> {
+                friendUsernames.clear();
+                JSONArray arr = json.getJSONArray("friends");
+                for (int i = 0; i < arr.length(); i++) friendUsernames.add(arr.getString(i));
             }
             case Protocol.FRIEND_REQUESTS_LIST -> {
                 pendingRequests.clear();

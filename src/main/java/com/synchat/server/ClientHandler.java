@@ -67,6 +67,7 @@ public class ClientHandler implements Runnable {
                 case Protocol.MESSAGE -> handleMessage(json);
                 case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
                 case Protocol.REQUEST_FRIEND_REQUESTS -> sendPendingFriendRequestsToSelf();
+                case Protocol.REQUEST_FRIENDS_LIST -> sendFriendsListToSelf();
                 default -> sendError("Unknown command: " + type);
             }
         } catch (SQLException e) {
@@ -149,14 +150,22 @@ public class ClientHandler implements Runnable {
 
         // Let the original requester know what happened to their request, if they're online.
         User requester = users.findById(fr.getUserId());
-        if (requester != null) {
-            ClientHandler requesterHandler = server.getHandler(requester.getUsername());
-            if (requesterHandler != null) {
-                JSONObject notice = new JSONObject();
-                notice.put("type", Protocol.FRIEND_RESPONSE_RESULT);
-                notice.put("byUsername", username);
-                notice.put("accepted", accepted);
-                requesterHandler.send(notice);
+        ClientHandler requesterHandler = requester == null ? null : server.getHandler(requester.getUsername());
+        if (requesterHandler != null) {
+            JSONObject notice = new JSONObject();
+            notice.put("type", Protocol.FRIEND_RESPONSE_RESULT);
+            notice.put("byUsername", username);
+            notice.put("accepted", accepted);
+            requesterHandler.send(notice);
+        }
+
+        // On acceptance, both people are now friends - push each of them a
+        // refreshed Friends list immediately instead of making them relog
+        // or manually refresh to see it.
+        if (accepted) {
+            send(buildFriendsListPayload(userId, friends, users));
+            if (requesterHandler != null && requester != null) {
+                requesterHandler.send(buildFriendsListPayload(requester.getId(), friends, users));
             }
         }
     }
@@ -245,6 +254,31 @@ public class ClientHandler implements Runnable {
         payload.put("type", Protocol.FRIEND_REQUESTS_LIST);
         payload.put("requests", arr);
         send(payload);
+    }
+
+    /**
+     * Sends this user their full accepted-friends list. A "friends" row
+     * links two user ids without saying which one is "you", so for each
+     * row we resolve whichever id ISN'T forUserId into that person's
+     * username - that's the actual friend from forUserId's point of view.
+     */
+    private void sendFriendsListToSelf() throws SQLException {
+        FriendRepository friends = new FriendRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+        send(buildFriendsListPayload(userId, friends, users));
+    }
+
+    private JSONObject buildFriendsListPayload(int forUserId, FriendRepository friends, UserRepository users) throws SQLException {
+        JSONArray arr = new JSONArray();
+        for (FriendRequest fr : friends.findFriendsOf(forUserId)) {
+            int otherId = (fr.getUserId() == forUserId) ? fr.getFriendId() : fr.getUserId();
+            User other = users.findById(otherId);
+            if (other != null) arr.put(other.getUsername());
+        }
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.FRIENDS_LIST);
+        payload.put("friends", arr);
+        return payload;
     }
 
     private void sendError(String message) {
