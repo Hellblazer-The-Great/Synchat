@@ -23,6 +23,7 @@ import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -62,20 +63,12 @@ public class MainChatView extends BorderPane implements MessageListener {
         this.myUsername = myUsername;
         client.setListener(this);
 
-        // FIX: don't rely solely on the server's login-time broadcast, which
-        // can land while we were still transitioning screens and get missed.
-        // Ask for a guaranteed-fresh roster now that we're definitely listening.
-        JSONObject refresh = new JSONObject();
-        refresh.put("type", Protocol.REQUEST_USER_LIST);
-        client.send(refresh);
-
-        JSONObject refreshRequests = new JSONObject();
-        refreshRequests.put("type", Protocol.REQUEST_FRIEND_REQUESTS);
-        client.send(refreshRequests);
-
-        JSONObject refreshFriends = new JSONObject();
-        refreshFriends.put("type", Protocol.REQUEST_FRIENDS_LIST);
-        client.send(refreshFriends);
+        // FIX: don't rely solely on the server's live broadcasts, which can
+        // land while we were still transitioning screens and get missed.
+        // Ask for a guaranteed-fresh snapshot of everything now that we're
+        // definitely listening. The same request can be re-sent later via
+        // the Refresh button (see buildTop()).
+        requestFullRefresh();
 
         setTop(buildTop());
 
@@ -103,14 +96,43 @@ public class MainChatView extends BorderPane implements MessageListener {
         Label quoteLabel = new Label("Loading today's quote...");
         quoteLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
         quoteLabel.setWrapText(true);
-        quoteLabel.maxWidthProperty().bind(this.widthProperty().subtract(220)); // RESPONSIVENESS
+        quoteLabel.maxWidthProperty().bind(this.widthProperty().subtract(290)); // RESPONSIVENESS
         new QuoteService().fetchDailyQuote(quoteLabel::setText);
 
-        HBox header = new HBox(16, new Label("Logged in as: " + myUsername), quoteLabel);
+        Button refreshBtn = new Button("\u27F3 Refresh");
+        refreshBtn.setTooltip(new Tooltip(
+                "Re-fetch who's online, your friends, and pending requests"));
+        refreshBtn.setOnAction(e -> requestFullRefresh());
+
+        HBox header = new HBox(16, new Label("Logged in as: " + myUsername), quoteLabel, refreshBtn);
         header.setPadding(new Insets(6, 12, 6, 12));
         header.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(quoteLabel, Priority.ALWAYS); // RESPONSIVENESS: quote fills the gap, button stays put
 
         return new VBox(menuBar, header);
+    }
+
+    /**
+     * Asks the server for a fresh snapshot of everything the sidebar shows:
+     * who's online, your accepted friends, and any pending friend requests.
+     * Sent automatically on login (see the constructor) and re-sendable any
+     * time via the header's Refresh button - useful if someone logged off
+     * in a way the live broadcasts didn't catch (e.g. their app crashed
+     * instead of closing cleanly, or a message was in flight during a
+     * screen transition).
+     */
+    private void requestFullRefresh() {
+        JSONObject refreshUsers = new JSONObject();
+        refreshUsers.put("type", Protocol.REQUEST_USER_LIST);
+        client.send(refreshUsers);
+
+        JSONObject refreshFriends = new JSONObject();
+        refreshFriends.put("type", Protocol.REQUEST_FRIENDS_LIST);
+        client.send(refreshFriends);
+
+        JSONObject refreshRequests = new JSONObject();
+        refreshRequests.put("type", Protocol.REQUEST_FRIEND_REQUESTS);
+        client.send(refreshRequests);
     }
 
     private void setupFileMenuActions(Stage stage) {
