@@ -168,6 +168,25 @@ Label { -fx-text-fill: -fx-text-main; }
 .menu-bar {
     -fx-background-color: -fx-surface;
 }
+/*
+ * DARK MODE FIX: MenuBar/Menu/MenuItem text doesn't come from our generic
+ * `Label { -fx-text-fill: -fx-text-main }` rule below - Modena gives the
+ * menu label its own higher-specificity `-fx-text-fill: -fx-text-base-color`,
+ * which is derived from the default (light) `-fx-base` and never gets
+ * repointed at our `-fx-text-main` token just because `.app-dark` swaps the
+ * background to a dark color. Result: dark text quietly sitting on a dark
+ * background in dark mode. Same story for the "File"/"Settings" top-level
+ * labels and every dropdown item's `MenuItem`/`CheckMenuItem` label, so all
+ * three get pinned to the token explicitly here instead of left to Modena's
+ * base-derived default.
+ */
+.menu-bar .label,
+.menu-item .label {
+    -fx-text-fill: -fx-text-main;
+}
+.context-menu {
+    -fx-background-color: -fx-surface;
+}
 
 .quote-label {
     -fx-font-style: italic;
@@ -185,8 +204,27 @@ Label { -fx-text-fill: -fx-text-main; }
 .tab-pane .tab-header-area {
     -fx-padding: 6 0 0 10;
 }
+.tab-pane .tab-header-background {
+    -fx-background-color: -fx-surface;
+}
 .tab-pane .tab {
+    -fx-background-color: -fx-surface;
     -fx-background-radius: 8 8 0 0;
+}
+.tab-pane .tab:selected {
+    -fx-background-color: -fx-bg;
+}
+/* DARK MODE FIX: same underlying issue as the .menu-bar rule above - the
+ * "Online"/"Friends"/"Requests" tab labels get their text-fill from Modena's
+ * base-derived default rather than our token, so once the tab background
+ * above is pinned to -fx-surface/-fx-bg for dark mode, the (still base-light)
+ * text goes invisible against it. */
+.tab-pane .tab .tab-label {
+    -fx-text-fill: -fx-text-main;
+}
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: -fx-accent;
+    -fx-font-weight: bold;
 }
 
 .list-view {
@@ -276,6 +314,15 @@ Label { -fx-text-fill: -fx-text-main; }
     -fx-font-size: 10px;
     -fx-font-weight: bold;
     -fx-text-fill: -fx-text-muted;
+}
+
+.bubble-edited-tag {
+    -fx-font-size: 9px;
+    -fx-font-style: italic;
+    -fx-text-fill: -fx-text-muted;
+}
+.bubble-mine .bubble-edited-tag {
+    -fx-text-fill: derive(white, -25%);
 }
 
 .bubble-wrapper {

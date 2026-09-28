@@ -16,6 +16,7 @@ import java.util.List;
  *  CREATE -> create()             (a new private message is persisted)
  *  READ   -> findConversation()   (full thread between two users)
  *  UPDATE -> update()             (mark as read)
+ *          -> updateContent()     (edit a message's text, flips "edited" on)
  *  DELETE -> delete() (inherited) (unsend a message)
  */
 public class MessageRepository extends AbstractRepository<Message, Integer> {
@@ -35,7 +36,8 @@ public class MessageRepository extends AbstractRepository<Message, Integer> {
                 rs.getInt("receiver_id"),
                 rs.getString("content"),
                 rs.getString("timestamp"),
-                rs.getInt("is_read") == 1
+                rs.getInt("is_read") == 1,
+                rs.getInt("edited") == 1
         );
     }
 
@@ -56,13 +58,29 @@ public class MessageRepository extends AbstractRepository<Message, Integer> {
         return null;
     }
 
-    /** UPDATE */
+    /** UPDATE - mark as read */
     @Override
     public boolean update(Message m) throws SQLException {
         String sql = "UPDATE messages SET is_read = ? WHERE id = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, m.isRead() ? 1 : 0);
             ps.setInt(2, m.getId());
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * UPDATE - edits an existing message's text in place and flips its
+     * "edited" flag on, so the sender can fix a typo or reword something
+     * without having to delete and resend. Ownership (only the original
+     * sender may do this) is enforced by the caller, not here - this method
+     * just performs the write.
+     */
+    public boolean updateContent(int id, String newContent) throws SQLException {
+        String sql = "UPDATE messages SET content = ?, edited = 1 WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newContent);
+            ps.setInt(2, id);
             return ps.executeUpdate() > 0;
         }
     }

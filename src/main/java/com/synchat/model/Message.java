@@ -10,14 +10,16 @@ public class Message implements JsonConvertible {
     private final String content;
     private final String timestamp;
     private boolean read;
+    private final boolean edited;
 
-    public Message(int id, int senderId, int receiverId, String content, String timestamp, boolean read) {
+    public Message(int id, int senderId, int receiverId, String content, String timestamp, boolean read, boolean edited) {
         this.id = id;
         this.senderId = senderId;
         this.receiverId = receiverId;
         this.content = content;
         this.timestamp = timestamp;
         this.read = read;
+        this.edited = edited;
     }
 
     public int getId() { return id; }
@@ -27,6 +29,7 @@ public class Message implements JsonConvertible {
     public String getTimestamp() { return timestamp; }
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
+    public boolean isEdited() { return edited; }
 
     @Override
     public JSONObject toJson() {
@@ -37,6 +40,7 @@ public class Message implements JsonConvertible {
         o.put("content", content);
         o.put("timestamp", timestamp == null ? JSONObject.NULL : timestamp);
         o.put("read", read);
+        o.put("edited", edited);
         return o;
     }
 }

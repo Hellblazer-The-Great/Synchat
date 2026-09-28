@@ -65,6 +65,8 @@ public class ClientHandler implements Runnable {
                 case Protocol.FRIEND_REQUEST -> handleFriendRequest(json);
                 case Protocol.FRIEND_RESPONSE -> handleFriendResponse(json);
                 case Protocol.MESSAGE -> handleMessage(json);
+                case Protocol.MESSAGE_EDIT -> handleMessageEdit(json);
+                case Protocol.MESSAGE_DELETE -> handleMessageDelete(json);
                 case Protocol.REQUEST_HISTORY -> handleHistoryRequest(json);
                 case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
                 case Protocol.REQUEST_FRIEND_REQUESTS -> sendPendingFriendRequestsToSelf();
@@ -215,17 +217,96 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        Message saved = messages.create(new Message(0, userId, recipient.getId(), json.getString("content"), null, false));
+        Message saved = messages.create(new Message(0, userId, recipient.getId(), json.getString("content"), null, false, false));
 
         JSONObject payload = new JSONObject();
         payload.put("type", Protocol.MESSAGE);
+        payload.put("id", saved.getId());
         payload.put("from", username);
         payload.put("content", saved.getContent());
         payload.put("timestamp", saved.getTimestamp());
+        payload.put("edited", saved.isEdited());
 
         ClientHandler recipientHandler = server.getHandler(recipient.getUsername());
         if (recipientHandler != null) recipientHandler.send(payload); // instant delivery if online
         send(payload); // echo back to sender so their own chat log shows it
+    }
+
+    /**
+     * DATA MANIPULATION - the "UPDATE" half of the messages CRUD exposed to
+     * the user as "Edit". Only the original sender may edit their own
+     * message (checked against the persisted row, not whatever the client
+     * claims). Both sides of the conversation get a live MESSAGE_EDITED
+     * push - the sender needs it too, since their own view of the message
+     * only ever reflects what the server confirms, same as a fresh send.
+     */
+    private void handleMessageEdit(JSONObject json) throws SQLException {
+        MessageRepository messages = new MessageRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+
+        int id = json.getInt("id");
+        String newContent = json.getString("content");
+        if (newContent.isBlank()) {
+            sendError("Message can't be empty");
+            return;
+        }
+
+        Message existing = messages.findById(id);
+        if (existing == null) {
+            sendError("Message not found");
+            return;
+        }
+        if (existing.getSenderId() != userId) {
+            sendError("You can only edit your own messages");
+            return;
+        }
+
+        messages.updateContent(id, newContent);
+
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.MESSAGE_EDITED);
+        payload.put("id", id);
+        payload.put("content", newContent);
+
+        User recipient = users.findById(existing.getReceiverId());
+        ClientHandler recipientHandler = recipient == null ? null : server.getHandler(recipient.getUsername());
+        if (recipientHandler != null) recipientHandler.send(payload);
+        send(payload);
+    }
+
+    /**
+     * DATA MANIPULATION - the "DELETE" half of the messages CRUD exposed to
+     * the user as "Delete" (a.k.a. unsend). Reuses the inherited
+     * AbstractRepository.delete(id) - see MessageRepository's class doc -
+     * after the same ownership check handleMessageEdit() uses. Both sides
+     * get a live MESSAGE_DELETED push so the bubble disappears from both
+     * chat logs immediately, not just the sender's.
+     */
+    private void handleMessageDelete(JSONObject json) throws SQLException {
+        MessageRepository messages = new MessageRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+
+        int id = json.getInt("id");
+        Message existing = messages.findById(id);
+        if (existing == null) {
+            sendError("Message not found");
+            return;
+        }
+        if (existing.getSenderId() != userId) {
+            sendError("You can only delete your own messages");
+            return;
+        }
+
+        messages.delete(id);
+
+        JSONObject payload = new JSONObject();
+        payload.put("type", Protocol.MESSAGE_DELETED);
+        payload.put("id", id);
+
+        User recipient = users.findById(existing.getReceiverId());
+        ClientHandler recipientHandler = recipient == null ? null : server.getHandler(recipient.getUsername());
+        if (recipientHandler != null) recipientHandler.send(payload);
+        send(payload);
     }
 
     /**
@@ -249,9 +330,11 @@ public class ClientHandler implements Runnable {
         JSONArray arr = new JSONArray();
         for (Message m : messages.findConversation(userId, other.getId())) {
             JSONObject o = new JSONObject();
+            o.put("id", m.getId());
             o.put("from", m.getSenderId() == userId ? username : other.getUsername());
             o.put("content", m.getContent());
             o.put("timestamp", m.getTimestamp());
+            o.put("edited", m.isEdited());
             arr.put(o);
         }
 

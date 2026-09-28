@@ -13,6 +13,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -39,6 +40,9 @@ import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * JAVAFX UI + LAYOUT RESPONSIVENESS
@@ -67,6 +71,9 @@ public class MainChatView extends BorderPane implements MessageListener {
     private final TextField inputField = new TextField();
     private final Label chatHeader = new Label("Select an online user to start chatting");
     private String activeChatPartner = null;
+    /** Live bubbles in the currently-open chat log, keyed by message id, so a later
+     *  MESSAGE_EDITED/MESSAGE_DELETED push can find and update/remove the right one. */
+    private final Map<Integer, BubbleRefs> bubblesById = new HashMap<>();
     private final ObservableList<IncomingRequest> pendingRequests = FXCollections.observableArrayList();
     private VBox requestsBox;
 
@@ -349,7 +356,10 @@ public class MainChatView extends BorderPane implements MessageListener {
         clearViewBtn.getStyleClass().add("button-pill");
         clearViewBtn.setTooltip(new Tooltip(
                 "Clears this window only - your saved history is untouched and reloads next time you open this chat"));
-        clearViewBtn.setOnAction(e -> chatLog.getChildren().clear());
+        clearViewBtn.setOnAction(e -> {
+            chatLog.getChildren().clear();
+            bubblesById.clear();
+        });
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -384,6 +394,7 @@ public class MainChatView extends BorderPane implements MessageListener {
         activeChatPartner = username;
         chatHeader.setText("Chat with " + username);
         chatLog.getChildren().clear();
+        bubblesById.clear();
 
         JSONObject req = new JSONObject();
         req.put("type", Protocol.REQUEST_HISTORY);
@@ -461,6 +472,7 @@ public class MainChatView extends BorderPane implements MessageListener {
                         activeChatPartner = null;
                         chatHeader.setText("Select an online user to start chatting");
                         chatLog.getChildren().clear();
+                        bubblesById.clear();
                     }
                 });
     }
@@ -476,7 +488,10 @@ public class MainChatView extends BorderPane implements MessageListener {
         inputField.clear();
     }
 
-    private void appendBubble(String author, String content, boolean mine) {
+    /** Handles to the pieces of a rendered bubble that MESSAGE_EDITED/MESSAGE_DELETED need to touch later. */
+    private record BubbleRefs(HBox row, Label contentLabel, Label editedTag) {}
+
+    private void appendBubble(int id, String author, String content, boolean mine, boolean edited) {
         VBox bubble = new VBox(2);
         bubble.getStyleClass().addAll(mine ? "bubble-mine" : "bubble-theirs", "bubble-wrapper");
         bubble.maxWidthProperty().bind(chatLog.widthProperty().multiply(0.72)); // RESPONSIVENESS
@@ -491,9 +506,64 @@ public class MainChatView extends BorderPane implements MessageListener {
         contentLabel.setWrapText(true);
         bubble.getChildren().add(contentLabel);
 
+        Label editedTag = new Label("(edited)");
+        editedTag.getStyleClass().add("bubble-edited-tag");
+        editedTag.setVisible(edited);
+        editedTag.setManaged(edited); // collapsed instead of leaving blank space when not edited
+        bubble.getChildren().add(editedTag);
+
+        // EDIT/DELETE: only your own messages get the right-click menu - the
+        // server enforces the same ownership rule independently, this just
+        // keeps the option from being offered on messages it would reject.
+        if (mine) {
+            ContextMenu menu = new ContextMenu();
+            MenuItem editItem = new MenuItem("Edit");
+            editItem.setOnAction(e -> beginEdit(id, contentLabel.getText()));
+            MenuItem deleteItem = new MenuItem("Delete");
+            deleteItem.setOnAction(e -> confirmAndDeleteMessage(id));
+            menu.getItems().addAll(editItem, deleteItem);
+
+            contentLabel.setContextMenu(menu); // right-click on the text itself
+            bubble.setOnContextMenuRequested(ev -> { // right-click anywhere else in the bubble (padding, edited tag)
+                menu.show(bubble, ev.getScreenX(), ev.getScreenY());
+                ev.consume();
+            });
+        }
+
         HBox row = new HBox(bubble);
         row.setAlignment(mine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        bubblesById.put(id, new BubbleRefs(row, contentLabel, editedTag));
         chatLog.getChildren().add(row);
+    }
+
+    /** Opens a pre-filled prompt (same pattern as "Add Friend...") and sends the new text for the server to confirm. */
+    private void beginEdit(int id, String currentContent) {
+        TextInputDialog dialog = new TextInputDialog(currentContent);
+        dialog.setHeaderText("Edit message");
+        dialog.setContentText("Message:");
+        dialog.setResizable(true);
+        dialog.showAndWait().ifPresent(newContent -> {
+            if (newContent.isBlank() || newContent.equals(currentContent)) return;
+            JSONObject req = new JSONObject();
+            req.put("type", Protocol.MESSAGE_EDIT);
+            req.put("id", id);
+            req.put("content", newContent);
+            client.send(req);
+        });
+    }
+
+    /** Confirms before deleting - same destructive-action pattern as confirmAndUnfriend(). */
+    private void confirmAndDeleteMessage(int id) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete this message? This can't be undone.");
+        confirm.setResizable(true);
+        confirm.showAndWait()
+                .filter(response -> response == ButtonType.OK)
+                .ifPresent(response -> {
+                    JSONObject req = new JSONObject();
+                    req.put("type", Protocol.MESSAGE_DELETE);
+                    req.put("id", id);
+                    client.send(req);
+                });
     }
 
     @Override
@@ -513,7 +583,7 @@ public class MainChatView extends BorderPane implements MessageListener {
                 String from = json.getString("from");
                 boolean mine = from.equals(myUsername);
                 if (activeChatPartner != null && (from.equals(activeChatPartner) || mine)) {
-                    appendBubble(from, json.getString("content"), mine);
+                    appendBubble(json.getInt("id"), from, json.getString("content"), mine, json.getBoolean("edited"));
                 }
             }
             case Protocol.MESSAGE_HISTORY -> {
@@ -521,13 +591,26 @@ public class MainChatView extends BorderPane implements MessageListener {
                 // already navigated away from by the time it arrives.
                 if (json.getString("with").equals(activeChatPartner)) {
                     chatLog.getChildren().clear();
+                    bubblesById.clear();
                     JSONArray history = json.getJSONArray("messages");
                     for (int i = 0; i < history.length(); i++) {
                         JSONObject m = history.getJSONObject(i);
                         String from = m.getString("from");
-                        appendBubble(from, m.getString("content"), from.equals(myUsername));
+                        appendBubble(m.getInt("id"), from, m.getString("content"), from.equals(myUsername), m.getBoolean("edited"));
                     }
                 }
+            }
+            case Protocol.MESSAGE_EDITED -> {
+                BubbleRefs refs = bubblesById.get(json.getInt("id"));
+                if (refs != null) {
+                    refs.contentLabel().setText(json.getString("content"));
+                    refs.editedTag().setVisible(true);
+                    refs.editedTag().setManaged(true);
+                }
+            }
+            case Protocol.MESSAGE_DELETED -> {
+                BubbleRefs refs = bubblesById.remove(json.getInt("id"));
+                if (refs != null) chatLog.getChildren().remove(refs.row());
             }
             case Protocol.FRIENDS_LIST -> {
                 friendUsernames.clear();

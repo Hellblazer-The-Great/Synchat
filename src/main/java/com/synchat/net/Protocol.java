@@ -24,5 +24,9 @@ public final class Protocol {
     public static final String MESSAGE = "MESSAGE";
     public static final String REQUEST_HISTORY = "REQUEST_HISTORY";
     public static final String MESSAGE_HISTORY = "MESSAGE_HISTORY";
+    public static final String MESSAGE_EDIT = "MESSAGE_EDIT";
+    public static final String MESSAGE_EDITED = "MESSAGE_EDITED";
+    public static final String MESSAGE_DELETE = "MESSAGE_DELETE";
+    public static final String MESSAGE_DELETED = "MESSAGE_DELETED";
     public static final String ERROR = "ERROR";
 }

@@ -6,6 +6,79 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.8.0 — Message edit/delete + dark mode text-visibility fix
+
+**Why:** the messages table had supported UPDATE/DELETE at the repository
+layer since v1.0.0 (see `MessageRepository`'s class doc), but nothing ever
+exposed it over the protocol or the UI - once a message was sent, it was
+sent forever, typos included. Separately, dark mode (v1.7.0) left the top
+`MenuBar`'s "File"/"Settings" labels and the sidebar's tab labels
+unreadable: Modena gives those specific labels their own text-fill derived
+from the (never-overridden) default `-fx-base`, so they didn't follow the
+`.app-dark` token swap the rest of the app uses and ended up dark-on-dark.
+
+- **`db/Database.java`**
+  - Added an `edited INTEGER NOT NULL DEFAULT 0` column to `messages`, plus
+    a startup `ALTER TABLE ... ADD COLUMN` (swallowing the "already exists"
+    error) so a database from before this version picks the column up too.
+
+- **`model/Message.java`**
+  - Added an `edited` field/getter and included it in `toJson()`.
+
+- **`repository/MessageRepository.java`**
+  - Added `updateContent(id, newContent)` - a second UPDATE alongside the
+    existing read-status one, setting the new text and flipping `edited`
+    to true. Ownership (only the sender may call this) is enforced by the
+    caller, same division of responsibility as everywhere else in this
+    class.
+
+- **`net/Protocol.java`**
+  - Added `MESSAGE_EDIT`/`MESSAGE_DELETE` (client → server) and
+    `MESSAGE_EDITED`/`MESSAGE_DELETED` (server → client) message type
+    constants.
+
+- **`server/ClientHandler.java`**
+  - Added `handleMessageEdit(...)` and `handleMessageDelete(...)`, plus
+    their cases in the `handle()` switch. Both look the message up by id,
+    reject anything not owned by the caller, then push a live
+    `MESSAGE_EDITED`/`MESSAGE_DELETED` notice to whichever of the two
+    participants is online - including the sender, since (same as sending)
+    their own view only ever reflects what the server confirms.
+  - `handleMessage(...)` and `handleHistoryRequest(...)` now include each
+    message's `id` and `edited` flag in the payload - previously omitted
+    since nothing needed to reference a specific message afterwards.
+
+- **`ui/MainChatView.java`**
+  - `appendBubble(...)` now takes the message's id and edited flag, tags
+    the bubble with an `(edited)` label when appropriate, and - for your
+    own messages only - attaches a right-click `ContextMenu` with **Edit**
+    and **Delete**. Edit reuses the same `TextInputDialog` pattern as "Add
+    Friend...", pre-filled with the current text; Delete reuses the same
+    confirm-first `Alert` pattern as `confirmAndUnfriend(...)`. Neither
+    updates the bubble directly - both just send the request and wait for
+    the server's `MESSAGE_EDITED`/`MESSAGE_DELETED` echo, same as a normal
+    send.
+  - Added `bubblesById`, a `Map<Integer, BubbleRefs>` of the currently
+    open conversation's on-screen bubbles, so a later edit/delete event can
+    find the right one. Cleared everywhere the chat log itself is cleared
+    (`openConversation`, "Clear view", and unfriending the open partner).
+  - `onServerEvent(...)` gained `MESSAGE_EDITED` (update the bubble's text
+    in place, show the "(edited)" tag) and `MESSAGE_DELETED` (remove the
+    bubble) cases.
+
+- **`resources/com/synchat/styles.css`**
+  - Pinned `.menu-bar .label` and `.menu-item .label` to `-fx-text-main`,
+    and gave `.context-menu` an explicit `-fx-surface` background, fixing
+    the invisible "File"/"Settings" text (and every dropdown item under
+    them) in dark mode.
+  - Gave the sidebar's `.tab-pane` tabs an explicit `-fx-surface`/`-fx-bg`
+    background (selected vs. unselected) and pinned `.tab-label` to
+    `-fx-text-main` (`-fx-accent` + bold when selected) for the same
+    reason - "Online"/"Friends"/"Requests" were going dark-on-dark too.
+  - Added `.bubble-edited-tag` for the new "(edited)" indicator.
+
+---
+
 ## v1.7.0 — Visual revamp + Settings menu
 
 **Why:** the whole app was styled with scattered inline `-fx-style` strings

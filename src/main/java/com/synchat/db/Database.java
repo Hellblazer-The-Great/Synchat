@@ -66,10 +66,22 @@ public final class Database {
                 "  content TEXT NOT NULL," +
                 "  timestamp TEXT NOT NULL," +
                 "  is_read INTEGER NOT NULL DEFAULT 0," +
+                "  edited INTEGER NOT NULL DEFAULT 0," +
                 "  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE," +
                 "  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE" +
                 ")"
             );
+
+            // MIGRATION: databases created before message edit/delete existed
+            // won't have this column yet - CREATE TABLE IF NOT EXISTS above is
+            // a no-op on an existing table, so add it here if missing. SQLite
+            // has no "ADD COLUMN IF NOT EXISTS", so this just swallows the
+            // "duplicate column" error on every startup after the first.
+            try {
+                st.execute("ALTER TABLE messages ADD COLUMN edited INTEGER NOT NULL DEFAULT 0");
+            } catch (SQLException alreadyExists) {
+                // column already present - nothing to do
+            }
         }
     }
 }
