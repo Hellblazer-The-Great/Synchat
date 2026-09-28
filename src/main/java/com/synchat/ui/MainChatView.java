@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -182,16 +183,27 @@ public class MainChatView extends BorderPane implements MessageListener {
         // Online/Offline indicator by cross-referencing the onlineUsers list
         // that USER_LIST broadcasts already keep up to date.
         friendsListView.setCellFactory(lv -> new ListCell<>() {
+            private final Label nameLabel = new Label();
+            private final Button unfriendBtn = new Button("Unfriend");
+            private final HBox row = new HBox(8, nameLabel, unfriendBtn);
+            {
+                row.setAlignment(Pos.CENTER_LEFT);
+                HBox.setHgrow(nameLabel, Priority.ALWAYS);
+                // getItem() is safe here: this handler only ever fires from a
+                // fully-populated (non-empty) cell the user is looking at.
+                unfriendBtn.setOnAction(e -> confirmAndUnfriend(getItem()));
+            }
+
             @Override
             protected void updateItem(String friendUsername, boolean empty) {
                 super.updateItem(friendUsername, empty);
                 if (empty || friendUsername == null) {
-                    setText(null);
-                    setTextFill(Color.BLACK);
+                    setGraphic(null);
                 } else {
                     boolean isOnline = onlineUsers.contains(friendUsername);
-                    setText(friendUsername + "   \u2022   " + (isOnline ? "Online" : "Offline"));
-                    setTextFill(isOnline ? Color.web("#2e7d32") : Color.GRAY);
+                    nameLabel.setText(friendUsername + "   \u2022   " + (isOnline ? "Online" : "Offline"));
+                    nameLabel.setTextFill(isOnline ? Color.web("#2e7d32") : Color.GRAY);
+                    setGraphic(row);
                 }
             }
         });
@@ -287,6 +299,38 @@ public class MainChatView extends BorderPane implements MessageListener {
 
     /** One incoming friend request waiting on a response: who sent it, and its DB row id. */
     private record IncomingRequest(int requestId, String fromUsername) {}
+
+    /**
+     * Confirms before removing a friend - this is destructive (their
+     * saved chat history stays put via MessageRepository, but the
+     * relationship itself is gone and would need a new friend request to
+     * restore) so it shouldn't fire from a stray click.
+     */
+    private void confirmAndUnfriend(String friendUsername) {
+        if (friendUsername == null) return;
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Remove " + friendUsername + " from your friends list?");
+        confirm.setResizable(true);
+        confirm.showAndWait()
+                .filter(response -> response == ButtonType.OK)
+                .ifPresent(response -> {
+                    JSONObject req = new JSONObject();
+                    req.put("type", Protocol.UNFRIEND);
+                    req.put("username", friendUsername);
+                    client.send(req);
+
+                    // The server's refreshed FRIENDS_LIST will drop them from
+                    // the sidebar; also back out of an open conversation with
+                    // them so the chat pane doesn't keep pointing at someone
+                    // who's no longer a friend.
+                    if (friendUsername.equals(activeChatPartner)) {
+                        activeChatPartner = null;
+                        chatHeader.setText("Select an online user to start chatting");
+                        chatLog.getChildren().clear();
+                    }
+                });
+    }
 
     private void sendCurrentMessage() {
         String text = inputField.getText();

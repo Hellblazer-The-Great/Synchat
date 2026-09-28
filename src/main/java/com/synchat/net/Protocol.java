@@ -18,6 +18,7 @@ public final class Protocol {
     public static final String FRIEND_REQUESTS_LIST = "FRIEND_REQUESTS_LIST";
     public static final String REQUEST_FRIENDS_LIST = "REQUEST_FRIENDS_LIST";
     public static final String FRIENDS_LIST = "FRIENDS_LIST";
+    public static final String UNFRIEND = "UNFRIEND";
     public static final String USER_LIST = "USER_LIST";
     public static final String REQUEST_USER_LIST = "REQUEST_USER_LIST";
     public static final String MESSAGE = "MESSAGE";

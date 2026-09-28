@@ -78,6 +78,25 @@ public class FriendRepository extends AbstractRepository<FriendRequest, Integer>
         return list;
     }
 
+    /**
+     * READ - the single friendship row between two specific users, in
+     * whichever direction it was originally created. Used by unfriend(),
+     * since the caller only knows "me" and "the other person," not which
+     * of them happened to send the original request.
+     */
+    public FriendRequest findBetween(int userId, int otherUserId) throws SQLException {
+        String sql = "SELECT * FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            ps.setInt(2, otherUserId);
+            ps.setInt(3, otherUserId);
+            ps.setInt(4, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? mapRow(rs) : null;
+            }
+        }
+    }
+
     /** READ - requests still awaiting this user's response. */
     public List<FriendRequest> findPendingFor(int userId) throws SQLException {
         List<FriendRequest> list = new ArrayList<>();

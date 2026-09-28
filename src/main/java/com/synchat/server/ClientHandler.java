@@ -69,6 +69,7 @@ public class ClientHandler implements Runnable {
                 case Protocol.REQUEST_USER_LIST -> sendUserListToSelf();
                 case Protocol.REQUEST_FRIEND_REQUESTS -> sendPendingFriendRequestsToSelf();
                 case Protocol.REQUEST_FRIENDS_LIST -> sendFriendsListToSelf();
+                case Protocol.UNFRIEND -> handleUnfriend(json);
                 default -> sendError("Unknown command: " + type);
             }
         } catch (SQLException e) {
@@ -168,6 +169,40 @@ public class ClientHandler implements Runnable {
             if (requesterHandler != null && requester != null) {
                 requesterHandler.send(buildFriendsListPayload(requester.getId(), friends, users));
             }
+        }
+    }
+
+    /**
+     * DATA MANIPULATION - the "DELETE" half of the friends CRUD, exposed to
+     * the user as "Unfriend". A friendship row doesn't record which side
+     * sent the original request, so FriendRepository.findBetween() looks
+     * it up regardless of direction before removing it. Both people get a
+     * refreshed FRIENDS_LIST pushed immediately afterwards - same pattern
+     * handleFriendResponse() already uses on acceptance - so neither side
+     * has to relog or manually refresh to see the friend disappear.
+     */
+    private void handleUnfriend(JSONObject json) throws SQLException {
+        FriendRepository friends = new FriendRepository(Database.getInstance().getConnection());
+        UserRepository users = new UserRepository(Database.getInstance().getConnection());
+
+        User other = users.findByUsername(json.getString("username"));
+        if (other == null) {
+            sendError("No such user");
+            return;
+        }
+
+        FriendRequest fr = friends.findBetween(userId, other.getId());
+        if (fr == null || fr.getStatus() != FriendStatus.ACCEPTED) {
+            sendError("You are not friends with " + other.getUsername());
+            return;
+        }
+        friends.delete(fr.getId());
+
+        send(buildFriendsListPayload(userId, friends, users));
+
+        ClientHandler otherHandler = server.getHandler(other.getUsername());
+        if (otherHandler != null) {
+            otherHandler.send(buildFriendsListPayload(other.getId(), friends, users));
         }
     }
 

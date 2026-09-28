@@ -6,6 +6,52 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.6.0 — Unfriend
+
+**Why:** the Friends tab could only ever grow — accepting a request added
+someone permanently, with no way to undo it short of editing the database
+by hand.
+
+- **`net/Protocol.java`**
+  - Added the `UNFRIEND` (client → server) message type constant.
+
+- **`repository/FriendRepository.java`**
+  - Added `findBetween(userId, otherUserId)` — looks up the single row
+    linking two specific users regardless of which of them originally sent
+    the request (`user_id`/`friend_id` can be in either order). Needed
+    because the server only knows "me" and "the friend I clicked," not who
+    happened to send the original `FRIEND_REQUEST`.
+  - No change to `delete(id)` — it's the same inherited
+    `AbstractRepository` method already used elsewhere; unfriending is just
+    a new caller for it.
+
+- **`server/ClientHandler.java`**
+  - Added `handleUnfriend(json)` and an `UNFRIEND` case in the `handle()`
+    switch. Resolves the target username, calls
+    `FriendRepository.findBetween(...)`, rejects the request if the two
+    users aren't an `ACCEPTED` friendship, then deletes that row.
+  - Pushes a refreshed `FRIENDS_LIST` to both people immediately afterward
+    (same live-update pattern `handleFriendResponse()` already uses on
+    acceptance), so the removed friend disappears from both sidebars
+    without either person needing to relog or hit Refresh.
+
+- **`ui/MainChatView.java`**
+  - `friendsListView`'s cell factory now renders each row as a
+    `Label` + "Unfriend" `Button` (`HBox`) instead of plain text, so the
+    Online/Offline styling still applies to the label while the button
+    stays available in every row.
+  - Added `confirmAndUnfriend(friendUsername)` — shows a resizable
+    confirmation `Alert` before doing anything, since removing a friend is
+    destructive; on confirmation it sends `UNFRIEND` to the server and, if
+    the removed friend was the currently-open conversation, resets the
+    chat pane back to its empty/no-selection state.
+  - No change to `onServerEvent(...)`'s existing `FRIENDS_LIST` case — it
+    already fully replaces `friendUsernames` from the server's payload, so
+    the removed friend drops out of the list automatically once the
+    server's push arrives.
+
+---
+
 ## v1.5.0 — Persistent chat history
 
 **Why:** messages were always being saved to `synchat.db` via
