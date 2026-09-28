@@ -6,6 +6,17 @@ you can point to this if you need to explain your development history.
 
 ---
 
+## v1.8.1 — Can't friend-request yourself
+
+- **`server/ClientHandler.java`** — `handleFriendRequest(...)` now rejects
+  a request where the target resolves to the caller's own `userId`,
+  mirroring the existing "no such user" guard right above it.
+- **`ui/MainChatView.java`** — "Add Friend..." checks the typed username
+  against `myUsername` first, so self-requests get an instant local
+  warning instead of a round trip to the server just to be told no.
+
+---
+
 ## v1.8.0 — Message edit/delete + dark mode text-visibility fix
 
 **Why:** the messages table had supported UPDATE/DELETE at the repository

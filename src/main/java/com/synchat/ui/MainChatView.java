@@ -222,6 +222,10 @@ public class MainChatView extends BorderPane implements MessageListener {
             dialog.setContentText("Username:");
             dialog.setResizable(true);
             dialog.showAndWait().ifPresent(uname -> {
+                if (uname.equals(myUsername)) {
+                    showResizableAlert(Alert.AlertType.WARNING, "You can't send a friend request to yourself.");
+                    return;
+                }
                 JSONObject req = new JSONObject();
                 req.put("type", Protocol.FRIEND_REQUEST);
                 req.put("username", uname);

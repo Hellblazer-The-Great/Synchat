@@ -129,6 +129,10 @@ public class ClientHandler implements Runnable {
             sendError("No such user");
             return;
         }
+        if (target.getId() == userId) {
+            sendError("You can't send a friend request to yourself");
+            return;
+        }
         FriendRequest created = friends.create(new FriendRequest(0, userId, target.getId(), FriendStatus.PENDING));
         ClientHandler targetHandler = server.getHandler(target.getUsername());
         if (targetHandler != null && created != null) {
